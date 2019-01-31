@@ -17,7 +17,7 @@ spec:
         name: busybox
         resources:
           requests:
-            cpu: "1"
+            cpu: "0.2"
       restartPolicy: Never
       schedulerName: kube-batch
 ---
@@ -26,4 +26,4 @@ kind: PodGroup
 metadata:
   name: qj-1
 spec:
-  minMember: 6
+  minMember: 5 

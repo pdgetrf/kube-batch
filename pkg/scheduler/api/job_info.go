@@ -228,6 +228,7 @@ func (ji *JobInfo) addTaskIndex(ti *TaskInfo) {
 func (ji *JobInfo) AddTaskInfo(ti *TaskInfo) {
 	ji.Tasks[ti.UID] = ti
 	ji.addTaskIndex(ti)
+	ji.Priority = (int)(*ti.Pod.Spec.Priority)
 
 	ji.TotalRequest.Add(ti.Resreq)
 

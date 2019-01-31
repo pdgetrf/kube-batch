@@ -54,7 +54,7 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 			queues.Push(queue)
 		}
 
-		glog.V(4).Infof("Added Job <%s/%s> into Queue <%s>", job.Namespace, job.Name, job.Queue)
+		glog.V(4).Infof("Added Job <%s/%s> into Queue <%s>, priority is %s", job.Namespace, job.Name, job.Queue, job.Priority)
 		jobsMap[job.Queue].Push(job)
 	}
 
@@ -83,6 +83,7 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 		}
 
 		job := jobs.Pop().(*api.JobInfo)
+		glog.V(4).Infof("===== working on newly popped job %s.", job.Name)
 		if _, found := pendingTasks[job.UID]; !found {
 			tasks := util.NewPriorityQueue(ssn.TaskOrderFn)
 			for _, task := range job.TaskStatusIndex[api.Pending] {
