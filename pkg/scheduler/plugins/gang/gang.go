@@ -108,6 +108,7 @@ func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
 
 		for _, preemptee := range preemptees {
 			job := ssn.JobIndex[preemptee.Job]
+
 			occupid := readyTaskNum(job)
 			preemptable := job.MinAvailable <= occupid-1
 
@@ -152,17 +153,17 @@ func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
 
 		if !lReady && !rReady {
 			/*
-			if lv.CreationTimestamp.Equal(&rv.CreationTimestamp) {
-				if lv.UID < rv.UID {
+				if lv.CreationTimestamp.Equal(&rv.CreationTimestamp) {
+					if lv.UID < rv.UID {
+						return -1
+					}
+				} else if lv.CreationTimestamp.Before(&rv.CreationTimestamp) {
 					return -1
 				}
-			} else if lv.CreationTimestamp.Before(&rv.CreationTimestamp) {
-				return -1
-			}
-			return 1
+				return 1
 			*/
 			r := rand.Intn(100)
-			if r%2==0 {
+			if r%2 == 0 {
 				return 1
 			}
 

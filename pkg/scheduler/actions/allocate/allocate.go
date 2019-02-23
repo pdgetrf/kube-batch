@@ -45,17 +45,22 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 	queues := util.NewPriorityQueue(ssn.QueueOrderFn)
 	jobsMap := map[api.QueueID]*util.PriorityQueue{}
 
+	nodeAllocatableWithTD := make(map[string]*api.Resource)
+
 	for _, job := range ssn.Jobs {
+
+		// sort jobs by queue and JobOrderFn
 		if _, found := jobsMap[job.Queue]; !found {
 			jobsMap[job.Queue] = util.NewPriorityQueue(ssn.JobOrderFn)
 		}
+		glog.V(4).Infof("Added Job <%s/%s> into Queue <%s>, priority is %s", job.Namespace, job.Name, job.Queue, job.Priority)
+		jobsMap[job.Queue].Push(job) // jobs in each queue are sorted by JobOrderFun
 
+		// collect all the queues
 		if queue, found := ssn.QueueIndex[job.Queue]; found {
 			queues.Push(queue)
 		}
 
-		glog.V(4).Infof("Added Job <%s/%s> into Queue <%s>, priority is %s", job.Namespace, job.Name, job.Queue, job.Priority)
-		jobsMap[job.Queue].Push(job)
 	}
 
 	glog.V(3).Infof("Try to allocate resource to %d Queues", len(jobsMap))
@@ -117,9 +122,24 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 			if len(job.NodesFitDelta) > 0 {
 				job.NodesFitDelta = make(api.NodeResourceMap)
 			}
+
 			for _, node := range ssn.Nodes {
 				glog.V(3).Infof("Considering Task <%v/%v> on node <%v>: <%v> vs. <%v>",
 					task.Namespace, task.Name, node.Name, task.Resreq, node.Idle)
+
+				if _, ok := nodeAllocatableWithTD[node.Name]; !ok {
+					backfilledRes := api.EmptyResource()
+
+					// allocatable = idle + backfill
+					backfilledRes.Add(node.Idle)
+					for _, task := range node.Tasks {
+						if task.IsBackfill {
+							backfilledRes.Add(task.Resreq)
+						}
+					}
+					nodeAllocatableWithTD[node.Name] = backfilledRes
+				}
+				nodeAllocatableRes := nodeAllocatableWithTD[node.Name]
 
 				// TODO (k82cn): Enable eCache for performance improvement.
 				if err := ssn.PredicateFn(task, node); err != nil {
@@ -129,10 +149,13 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 				}
 
 				// Allocate idle resource to the task.
-				if task.Resreq.LessEqual(node.Idle) {
+				if task.Resreq.LessEqual(nodeAllocatableRes) {
+					nodeAllocatableRes.Sub(task.Resreq)
+
 					glog.V(3).Infof("Binding Task <%v/%v> to node <%v>",
 						task.Namespace, task.Name, node.Name)
-					if err := ssn.Allocate(task, node.Name); err != nil {
+
+					if err := ssn.Allocate(task, node.Name, !task.Resreq.LessEqual(node.Idle)); err != nil {
 						glog.Errorf("Failed to bind Task %v on %v in Session %v",
 							task.UID, node.Name, ssn.UID)
 						continue
@@ -166,9 +189,12 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 				jobs.Push(job)
 				// Handle one assigned task in each loop.
 				break
+			} else {
+				// MQ: found a task that cannot be scheduled
+				// MQ: revert all new allocation for this host
 			}
 
-			// If current task is not assgined, try to fit all rest tasks.
+			// If current task is not assigned, try to fit all rest tasks.
 		}
 
 		// Added Queue back until no job in Queue.

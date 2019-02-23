@@ -57,17 +57,25 @@ func (alloc *reclaimAction) Execute(ssn *framework.Session) {
 				job.Queue, job.Namespace, job.Name)
 			continue
 		} else {
+
+			// put all queues of jobs into a queue
+			// PQ: what if there's multiple jobs in the same queue?
 			glog.V(4).Infof("Added Queue <%s> for Job <%s/%s>",
 				queue.Name, job.Namespace, job.Name)
 			queues.Push(queue)
 		}
 
 		if len(job.TaskStatusIndex[api.Pending]) != 0 {
+			// sort jobs that have pending tasks by queue
 			if _, found := preemptorsMap[job.Queue]; !found {
 				preemptorsMap[job.Queue] = util.NewPriorityQueue(ssn.JobOrderFn)
 			}
 			preemptorsMap[job.Queue].Push(job)
+
+			// WTF is this?
 			underRequest = append(underRequest, job)
+
+			// put all pending tasks of a job into it's own queue
 			preemptorTasks[job.UID] = util.NewPriorityQueue(ssn.TaskOrderFn)
 			for _, task := range job.TaskStatusIndex[api.Pending] {
 				preemptorTasks[job.UID].Push(task)

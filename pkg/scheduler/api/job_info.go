@@ -48,6 +48,10 @@ type TaskInfo struct {
 	VolumeReady bool
 
 	Pod *v1.Pod
+
+	// Indicates whether or not the task is a backfill task. Either persist
+	// across sessions, or add this flag in pod annotation.
+	IsBackfill bool
 }
 
 func getJobID(pod *v1.Pod) JobID {
@@ -70,15 +74,16 @@ func NewTaskInfo(pod *v1.Pod) *TaskInfo {
 	}
 
 	ti := &TaskInfo{
-		UID:       TaskID(pod.UID),
-		Job:       getJobID(pod),
-		Name:      pod.Name,
-		Namespace: pod.Namespace,
-		NodeName:  pod.Spec.NodeName,
-		Status:    getTaskStatus(pod),
-		Priority:  1,
-		Pod:       pod,
-		Resreq:    req,
+		UID:        TaskID(pod.UID),
+		Job:        getJobID(pod),
+		Name:       pod.Name,
+		Namespace:  pod.Namespace,
+		NodeName:   pod.Spec.NodeName,
+		Status:     getTaskStatus(pod),
+		Priority:   1,
+		Pod:        pod,
+		Resreq:     req,
+		IsBackfill: false,
 	}
 
 	if pod.Spec.Priority != nil {
@@ -100,12 +105,13 @@ func (ti *TaskInfo) Clone() *TaskInfo {
 		Pod:         ti.Pod,
 		Resreq:      ti.Resreq.Clone(),
 		VolumeReady: ti.VolumeReady,
+		IsBackfill:  ti.IsBackfill,
 	}
 }
 
 func (ti TaskInfo) String() string {
-	return fmt.Sprintf("Task (%v:%v/%v): job %v, status %v, pri %v, resreq %v",
-		ti.UID, ti.Namespace, ti.Name, ti.Job, ti.Status, ti.Priority, ti.Resreq)
+	return fmt.Sprintf("Task (%v:%v/%v): job %v, status %v, pri %v, resreq %v, isBackfill %v",
+		ti.UID, ti.Namespace, ti.Name, ti.Job, ti.Status, ti.Priority, ti.Resreq, ti.IsBackfill)
 }
 
 // JobID is the type of JobInfo's ID.

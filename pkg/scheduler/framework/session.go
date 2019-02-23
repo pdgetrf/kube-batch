@@ -37,15 +37,17 @@ type Session struct {
 
 	cache cache.Cache
 
-	Jobs       []*api.JobInfo
-	JobIndex   map[api.JobID]*api.JobInfo
-	Nodes      []*api.NodeInfo
-	NodeIndex  map[string]*api.NodeInfo
-	Queues     []*api.QueueInfo
-	QueueIndex map[api.QueueID]*api.QueueInfo
-	Others     []*api.TaskInfo
-	Backlog    []*api.JobInfo
-	Tiers      []conf.Tier
+	Jobs []*api.JobInfo
+	// to keep track of topdog jobs that are borrowing resources and ready to run
+	TopDogReadyJobs map[api.JobID]*api.JobInfo
+	JobIndex        map[api.JobID]*api.JobInfo
+	Nodes           []*api.NodeInfo
+	NodeIndex       map[string]*api.NodeInfo
+	Queues          []*api.QueueInfo
+	QueueIndex      map[api.QueueID]*api.QueueInfo
+	Others          []*api.TaskInfo
+	Backlog         []*api.JobInfo
+	Tiers           []conf.Tier
 
 	plugins        map[string]Plugin
 	eventHandlers  []*EventHandler
@@ -120,6 +122,8 @@ func openSession(cache cache.Cache) *Session {
 	}
 
 	ssn.Others = snapshot.Others
+
+	ssn.TopDogReadyJobs = map[api.JobID]*api.JobInfo{}
 
 	glog.V(3).Infof("Open Session %v with <%d> Job and <%d> Queues",
 		ssn.UID, len(ssn.Jobs), len(ssn.Queues))
@@ -240,7 +244,7 @@ func (ssn *Session) Pipeline(task *api.TaskInfo, hostname string) error {
 	return nil
 }
 
-func (ssn *Session) Allocate(task *api.TaskInfo, hostname string) error {
+func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillTaskRes bool) error {
 	if err := ssn.cache.AllocateVolumes(task, hostname); err != nil {
 		return err
 	}
@@ -248,9 +252,13 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string) error {
 	// Only update status in session
 	job, found := ssn.JobIndex[task.Job]
 	if found {
-		if err := job.UpdateTaskStatus(task, api.Allocated); err != nil {
+		newStatus := api.Allocated
+		if usingBackfillTaskRes {
+			newStatus = api.AllocatedOverBackfill
+		}
+		if err := job.UpdateTaskStatus(task, newStatus); err != nil {
 			glog.Errorf("Failed to update task <%v/%v> status to %v in Session <%v>: %v",
-				task.Namespace, task.Name, api.Allocated, ssn.UID, err)
+				task.Namespace, task.Name, newStatus, ssn.UID, err)
 		}
 	} else {
 		glog.Errorf("Failed to found Job <%s> in Session <%s> index when binding.",
@@ -272,6 +280,7 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string) error {
 	}
 
 	// Callbacks
+	// TODO: may need to fix (Peng)
 	for _, eh := range ssn.eventHandlers {
 		if eh.AllocateFunc != nil {
 			eh.AllocateFunc(&Event{
@@ -280,13 +289,17 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string) error {
 		}
 	}
 
-	if ssn.JobReady(job) {
+	// do not dispatch when using backfilled task resource
+	if ssn.JobReady(job) && !usingBackfillTaskRes {
 		for _, task := range job.TaskStatusIndex[api.Allocated] {
 			if err := ssn.dispatch(task); err != nil {
 				glog.Errorf("Failed to dispatch task <%v/%v>: %v",
 					task.Namespace, task.Name, err)
 			}
 		}
+	} else if ssn.JobReady(job) {
+		// top dog jobs using backfill resource is ready to run
+		ssn.TopDogReadyJobs[job.UID] = job
 	}
 
 	return nil
