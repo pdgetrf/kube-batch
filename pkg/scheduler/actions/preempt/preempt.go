@@ -89,11 +89,14 @@ func (alloc *preemptAction) Execute(ssn *framework.Session) {
 	for _, node := range ssn.Nodes {
 		// get the debt resource target
 		debtRes := node.Used.Sub(node.Capability)
-
 		for _, task := range node.Tasks {
 			if _, ok := ssn.TopDogReadyJobs[task.Job]; !ok {
 				debtRes.Sub(task.Resreq)
 			}
+		}
+		if debtRes.IsBelowZero() {
+			// skip this node if all resource usage is below capacity
+			continue
 		}
 
 		// preempt just enough backfilled tasks to meet the resource debt target
@@ -128,6 +131,13 @@ func (alloc *preemptAction) Execute(ssn *framework.Session) {
 			}
 		}
 		stmt.Commit()
+	}
+
+	/*
+	 * TODO: remove this after testing
+	 */
+	if true {
+		return
 	}
 
 	// Preemption between Jobs within the same queue.

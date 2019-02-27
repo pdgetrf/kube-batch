@@ -76,6 +76,12 @@ func (r *Resource) IsEmpty() bool {
 	return r.MilliCPU < minMilliCPU && r.Memory < minMemory && r.MilliGPU < minMilliGPU
 }
 
+func (r *Resource) IsBelowZero() bool {
+	return r.MilliCPU < 0 &&
+		r.Memory < 0 &&
+		r.MilliGPU < 0
+}
+
 func (r *Resource) IsZero(rn v1.ResourceName) bool {
 	switch rn {
 	case v1.ResourceCPU:

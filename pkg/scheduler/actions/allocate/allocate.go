@@ -45,7 +45,8 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 	queues := util.NewPriorityQueue(ssn.QueueOrderFn)
 	jobsMap := map[api.QueueID]*util.PriorityQueue{}
 
-	nodeAllocatableWithTD := make(map[string]*api.Resource)
+	// nodeAllocatable = Idle + backfilled - sum(top dogs)
+	nodeAllocatable := make(map[string]*api.Resource)
 
 	for _, job := range ssn.Jobs {
 
@@ -127,19 +128,20 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 				glog.V(3).Infof("Considering Task <%v/%v> on node <%v>: <%v> vs. <%v>",
 					task.Namespace, task.Name, node.Name, task.Resreq, node.Idle)
 
-				if _, ok := nodeAllocatableWithTD[node.Name]; !ok {
+				if _, ok := nodeAllocatable[node.Name]; !ok {
 					backfilledRes := api.EmptyResource()
 
 					// allocatable = idle + backfill
 					backfilledRes.Add(node.Idle)
+
 					for _, task := range node.Tasks {
 						if task.IsBackfill {
 							backfilledRes.Add(task.Resreq)
 						}
 					}
-					nodeAllocatableWithTD[node.Name] = backfilledRes
+					nodeAllocatable[node.Name] = backfilledRes
 				}
-				nodeAllocatableRes := nodeAllocatableWithTD[node.Name]
+				nodeAllocatableRes := nodeAllocatable[node.Name]
 
 				// TODO (k82cn): Enable eCache for performance improvement.
 				if err := ssn.PredicateFn(task, node); err != nil {
