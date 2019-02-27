@@ -65,6 +65,64 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 				}
 			} else {
 				// TODO (k82cn): backfill for other case.
+				// remove the top dog tasks that are not ready to run
+				for _, node := range ssn.Nodes {
+					for _, task := range node.Tasks {
+						if _, ok := ssn.TopDogReadyJobs[task.Job]; ok {
+
+							// change task status back to Pending
+							if err := job.UpdateTaskStatus(task, api.Pending); err != nil {
+								glog.Errorf("Failed to update task <%v/%v> status to %v in Session <%v>: %v",
+									task.Namespace, task.Name, api.Pending, ssn.UID, err)
+							}
+
+							// remove the task from the node
+							node.RemoveTask(task)
+						}
+					}
+				}
+
+				// pick a task to back fill
+				// hack: using the job created most recently for testing
+				// TODO: better way to pick backfill job
+				bfJob := &api.JobInfo{
+					Name: "",
+				}
+				for _, job := range ssn.Jobs {
+					// skip ready jobs
+					if ssn.JobReady(job) {
+						continue
+					}
+
+					if bfJob.Name == "" {
+						bfJob = job
+						continue
+					}
+
+					if job.CreationTimestamp.After(bfJob.CreationTimestamp.Time) {
+						bfJob = job
+					}
+				}
+
+				// allocate(backfill) the task
+				for _, task := range bfJob.TaskStatusIndex[api.Pending] {
+					task.IsBackfill = true
+					for _, node := range ssn.Nodes {
+						if err := ssn.PredicateFn(task, node); err != nil {
+							glog.V(3).Infof("Predicates failed for task <%s/%s> on node <%s>: %v",
+								task.Namespace, task.Name, node.Name, err)
+							continue
+						}
+
+						glog.V(3).Infof("Binding Task <%v/%v> to node <%v>", task.Namespace, task.Name, node.Name)
+						if err := ssn.Allocate(task, node.Name, false); err != nil {
+							glog.Errorf("Failed to bind Task %v on %v in Session %v", task.UID, node.Name, ssn.UID)
+							continue
+						}
+
+						// TODO: should stop further task allocation here if job is ready?
+					}
+				}
 			}
 		}
 	}

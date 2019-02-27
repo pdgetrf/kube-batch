@@ -568,6 +568,7 @@ func (sc *SchedulerCache) Snapshot() *kbapi.ClusterInfo {
 	}
 
 	for _, value := range sc.Jobs {
+
 		// If no scheduling spec, does not handle it.
 		if value.PodGroup == nil && value.PDB == nil {
 			glog.V(4).Infof("The scheduling spec of Job <%v:%s/%s> is nil, ignore it.",

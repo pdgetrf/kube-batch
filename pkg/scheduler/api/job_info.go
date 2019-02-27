@@ -312,8 +312,23 @@ func (ji *JobInfo) Clone() *JobInfo {
 		info.NodeSelector[k] = v
 	}
 
+	// check whether job is running as backfill
+	// propagate to task if yes
+	isJobBackfilled := false
+	for _, cond := range ji.PodGroup.Status.Conditions {
+		if cond.Type == arbcorev1.PodGroupBackfilledType {
+			isJobBackfilled = true
+			break
+		}
+	}
+
 	for _, task := range ji.Tasks {
-		info.AddTaskInfo(task.Clone())
+		clonedTask := task.Clone()
+		if isJobBackfilled {
+			clonedTask.IsBackfill = true
+		}
+
+		info.AddTaskInfo(clonedTask)
 	}
 
 	return info

@@ -160,6 +160,8 @@ func closeSession(ssn *Session) {
 	glog.V(3).Infof("Close Session %v", ssn.UID)
 }
 
+// very confusing function name!
+// this updates the PodGroup.Status in the job
 func jobStatus(ssn *Session, jobInfo *api.JobInfo) v1alpha1.PodGroupStatus {
 	status := jobInfo.PodGroup.Status
 
@@ -174,10 +176,11 @@ func jobStatus(ssn *Session, jobInfo *api.JobInfo) v1alpha1.PodGroupStatus {
 		}
 	}
 
-	// If running tasks && unschedulable, unknown phase
 	if len(jobInfo.TaskStatusIndex[api.Running]) != 0 && unschedulable {
+		// If running tasks && unschedulable, unknown phase
 		status.Phase = v1alpha1.PodGroupUnknown
 	} else {
+		// mark status to running or pending
 		allocated := 0
 		for status, tasks := range jobInfo.TaskStatusIndex {
 			if api.AllocatedStatus(status) {
@@ -193,6 +196,7 @@ func jobStatus(ssn *Session, jobInfo *api.JobInfo) v1alpha1.PodGroupStatus {
 		}
 	}
 
+	// statistics of tasks in different status
 	status.Running = int32(len(jobInfo.TaskStatusIndex[api.Running]))
 	status.Failed = int32(len(jobInfo.TaskStatusIndex[api.Failed]))
 	status.Succeeded = int32(len(jobInfo.TaskStatusIndex[api.Succeeded]))
