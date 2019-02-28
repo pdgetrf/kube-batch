@@ -27,7 +27,6 @@ import (
 	"github.com/kubernetes-sigs/kube-batch/pkg/apis/scheduling/v1alpha1"
 	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/api"
 	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/framework"
-	"math/rand"
 )
 
 type gangPlugin struct {
@@ -152,22 +151,22 @@ func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
 		}
 
 		if !lReady && !rReady {
-			/*
-				if lv.CreationTimestamp.Equal(&rv.CreationTimestamp) {
-					if lv.UID < rv.UID {
-						return -1
-					}
-				} else if lv.CreationTimestamp.Before(&rv.CreationTimestamp) {
+			if lv.CreationTimestamp.Equal(&rv.CreationTimestamp) {
+				if lv.UID < rv.UID {
 					return -1
 				}
-				return 1
-			*/
-			r := rand.Intn(100)
-			if r%2 == 0 {
-				return 1
+			} else if lv.CreationTimestamp.Before(&rv.CreationTimestamp) {
+				return -1
 			}
+			return 1
+			/*
+				r := rand.Intn(100)
+				if r%2 == 0 {
+					return 1
+				}
 
-			return -1
+				return -1
+			*/
 		}
 
 		return 0
@@ -202,6 +201,7 @@ func (gp *gangPlugin) OnSessionClose(ssn *framework.Session) {
 						LastTransitionTime: metav1.Now(),
 						TransitionID:       string(ssn.UID),
 					}
+					glog.Info("Marked 'backfilled' condition for job %s", job.Name)
 					break
 				}
 			}

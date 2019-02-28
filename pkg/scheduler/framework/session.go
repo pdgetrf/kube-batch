@@ -165,6 +165,8 @@ func closeSession(ssn *Session) {
 func jobStatus(ssn *Session, jobInfo *api.JobInfo) v1alpha1.PodGroupStatus {
 	status := jobInfo.PodGroup.Status
 
+	glog.Info("pod group %s status condition is %v", jobInfo.Name, status.Conditions)
+
 	unschedulable := false
 	for _, c := range status.Conditions {
 		if c.Type == v1alpha1.PodGroupUnschedulableType &&

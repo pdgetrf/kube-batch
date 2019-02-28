@@ -85,7 +85,7 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 				// pick a task to back fill
 				// hack: using the job created most recently for testing
 				// TODO: better way to pick backfill job
-				bfJob := &api.JobInfo{
+				backfillJob := &api.JobInfo{
 					Name: "",
 				}
 				for _, job := range ssn.Jobs {
@@ -94,18 +94,23 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 						continue
 					}
 
-					if bfJob.Name == "" {
-						bfJob = job
+					if backfillJob.Name == "" {
+						backfillJob = job
 						continue
 					}
 
-					if job.CreationTimestamp.After(bfJob.CreationTimestamp.Time) {
-						bfJob = job
+					if job.CreationTimestamp.After(backfillJob.CreationTimestamp.Time) {
+						backfillJob = job
 					}
 				}
 
+				if backfillJob.Name == "" {
+					glog.Info("no job to backfill")
+					return
+				}
+
 				// allocate(backfill) the task
-				for _, task := range bfJob.TaskStatusIndex[api.Pending] {
+				for _, task := range backfillJob.TaskStatusIndex[api.Pending] {
 					task.IsBackfill = true
 					for _, node := range ssn.Nodes {
 						if err := ssn.PredicateFn(task, node); err != nil {

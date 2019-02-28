@@ -18,6 +18,7 @@ package api
 
 import (
 	"fmt"
+	"github.com/golang/glog"
 	"sort"
 	"strings"
 
@@ -326,6 +327,7 @@ func (ji *JobInfo) Clone() *JobInfo {
 		clonedTask := task.Clone()
 		if isJobBackfilled {
 			clonedTask.IsBackfill = true
+			glog.Info("marked task %s to be backfilled", clonedTask.Name)
 		}
 
 		info.AddTaskInfo(clonedTask)
