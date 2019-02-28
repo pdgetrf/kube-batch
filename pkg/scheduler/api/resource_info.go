@@ -104,15 +104,15 @@ func (r *Resource) Add(rr *Resource) *Resource {
 
 //Sub subtracts two Resource objects.
 func (r *Resource) Sub(rr *Resource) *Resource {
-	if rr.LessEqual(r) {
-		r.MilliCPU -= rr.MilliCPU
-		r.Memory -= rr.Memory
-		r.MilliGPU -= rr.MilliGPU
-		return r
-	}
+	r.MilliCPU -= rr.MilliCPU
+	r.Memory -= rr.Memory
+	r.MilliGPU -= rr.MilliGPU
+	return r
 
+	/* allow negative resource accounting
 	panic(fmt.Errorf("Resource is not sufficient to do operation: <%v> sub <%v>",
 		r, rr))
+	*/
 }
 
 //Computes the delta between a resource oject representing available
