@@ -54,7 +54,7 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 		if _, found := jobsMap[job.Queue]; !found {
 			jobsMap[job.Queue] = util.NewPriorityQueue(ssn.JobOrderFn)
 		}
-		glog.V(4).Infof("Added Job <%s/%s> into Queue <%s>, priority is %s", job.Namespace, job.Name, job.Queue, job.Priority)
+		glog.V(4).Infof("Added Job <%s/%s> into Queue <%s>, priority is %d", job.Namespace, job.Name, job.Queue, job.Priority)
 		jobsMap[job.Queue].Push(job) // jobs in each queue are sorted by JobOrderFun
 
 		// collect all the queues
