@@ -265,6 +265,8 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 		if err := job.UpdateTaskStatus(task, newStatus); err != nil {
 			glog.Errorf("Failed to update task <%v/%v> status to %v in Session <%v>: %v",
 				task.Namespace, task.Name, newStatus, ssn.UID, err)
+		} else {
+			glog.Infof("task %s status is set to %d %d", task.Name, task.Status, newStatus)
 		}
 	} else {
 		glog.Errorf("Failed to found Job <%s> in Session <%s> index when binding.",

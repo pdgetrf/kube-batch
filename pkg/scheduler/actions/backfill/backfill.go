@@ -68,8 +68,10 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 				// remove the top dog tasks that are not ready to run
 				for _, node := range ssn.Nodes {
 					for _, task := range node.Tasks {
-						if _, ok := ssn.TopDogReadyJobs[task.Job]; ok {
-
+						if task.Status != api.Allocated {
+							continue
+						}
+						if _, ok := ssn.TopDogReadyJobs[task.Job]; !ok {
 							// change task status back to Pending
 							if err := job.UpdateTaskStatus(task, api.Pending); err != nil {
 								glog.Errorf("Failed to update task <%v/%v> status to %v in Session <%v>: %v",
@@ -78,6 +80,7 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 
 							// remove the task from the node
 							node.RemoveTask(task)
+							glog.Infof("removed task %s from node, idle is %v", node.Idle)
 						}
 					}
 				}
@@ -85,17 +88,24 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 				// pick a task to back fill
 				// hack: using the job created most recently for testing
 				// TODO: better way to pick backfill job
-				backfillJob := &api.JobInfo{
-					Name: "",
-				}
+				var backfillJob *api.JobInfo
 				for _, job := range ssn.Jobs {
 					// skip ready jobs
 					if ssn.JobReady(job) {
 						continue
 					}
 
-					if backfillJob.Name == "" {
-						backfillJob = job
+					backfillJob = job
+
+					isTopDog := false
+					for _, task := range job.Tasks {
+						glog.Infof("task %s has status %d, %d", task.Name, task.Status, api.Allocated)
+						if task.Status == api.Allocated {
+							isTopDog = true
+						}
+					}
+					if isTopDog {
+						backfillJob = nil
 						continue
 					}
 
@@ -104,10 +114,12 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 					}
 				}
 
-				if backfillJob.Name == "" {
+				if backfillJob == nil {
 					glog.Info("no job to backfill")
 					return
 				}
+
+				glog.Infof("trying to backfill job %v", backfillJob)
 
 				// allocate(backfill) the task
 				for _, task := range backfillJob.TaskStatusIndex[api.Pending] {
@@ -119,10 +131,12 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 							continue
 						}
 
-						glog.V(3).Infof("Binding Task <%v/%v> to node <%v>", task.Namespace, task.Name, node.Name)
-						if err := ssn.Allocate(task, node.Name, false); err != nil {
-							glog.Errorf("Failed to bind Task %v on %v in Session %v", task.UID, node.Name, ssn.UID)
-							continue
+						if task.Resreq.LessEqual(node.Idle) {
+							glog.V(3).Infof("Binding Task <%v/%v> to node <%v>", task.Namespace, task.Name, node.Name)
+							if err := ssn.Allocate(task, node.Name, false); err != nil {
+								glog.Errorf("Failed to bind Task %v on %v in Session %v", task.UID, node.Name, ssn.UID)
+								continue
+							}
 						}
 
 						// TODO: should stop further task allocation here if job is ready?
