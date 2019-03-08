@@ -86,16 +86,37 @@ func (alloc *preemptAction) Execute(ssn *framework.Session) {
 	}
 
 	// loop through all the node to preempt backfilled job
+	glog.Infof("##### top dog ready job = %v", ssn.TopDogReadyJobs)
 	for _, node := range ssn.Nodes {
+
+		glog.Infof("##### node allocatable capacity %v | used: %v | idle: %v",
+			node.Allocatable.MilliCPU, node.Used.MilliCPU, node.Idle.MilliCPU)
+
 		// get the debt resource target
-		debtRes := node.Used.Sub(node.Capability)
+		debtRes := node.Used.Clone()
+		glog.Infof("##### before %v %v", debtRes.MilliCPU, node.Used.MilliCPU)
+		debtRes.Sub(node.Capability)
+		glog.Infof("##### after %v %v", debtRes.MilliCPU, node.Used.MilliCPU)
 		for _, task := range node.Tasks {
+			if _, found := ssn.JobIndex[task.Job]; !found {
+				// do not handle irrelevant tasks
+				continue
+			}
+			if task.Status != api.Allocated && task.Status != api.AllocatedOverBackfill {
+				continue
+			}
+
 			if _, ok := ssn.TopDogReadyJobs[task.Job]; !ok {
 				debtRes.Sub(task.Resreq)
+				glog.Infof("##### reduced debt by task %s by %v to %v", task.Name, task.Resreq.MilliCPU, debtRes.MilliCPU)
 			}
 		}
+
+		glog.Infof("##### debt is %v", debtRes.MilliCPU)
+
 		if debtRes.IsBelowZero() {
 			// skip this node if all resource usage is below capacity
+			glog.Infof("no need to preempt on node %s", node.Name)
 			continue
 		}
 
@@ -128,6 +149,8 @@ func (alloc *preemptAction) Execute(ssn *framework.Session) {
 				glog.Errorf("Failed to preempt Task <%s/%s>: %v",
 					preemptee.Namespace, preemptee.Name, err)
 				continue
+			} else {
+				glog.Infof("xxxx task %s will be preempted", preemptee.Name)
 			}
 		}
 		stmt.Commit()

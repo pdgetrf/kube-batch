@@ -89,7 +89,6 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 		}
 
 		job := jobs.Pop().(*api.JobInfo)
-		glog.V(4).Infof("===== working on newly popped job %s.", job.Name)
 		if _, found := pendingTasks[job.UID]; !found {
 			tasks := util.NewPriorityQueue(ssn.TaskOrderFn)
 			for _, task := range job.TaskStatusIndex[api.Pending] {
@@ -137,6 +136,7 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 					for _, task := range node.Tasks {
 						if task.IsBackfill {
 							backfilledRes.Add(task.Resreq)
+							glog.Infof("adding task %s to nodeAllocable", task.Name)
 						}
 					}
 					nodeAllocatable[node.Name] = backfilledRes
@@ -151,10 +151,11 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 				}
 
 				// Allocate idle resource to the task.
+				glog.Infof("node.Idle = %v, node.Allocable = %v", node.Idle, nodeAllocatableRes)
 				if task.Resreq.LessEqual(nodeAllocatableRes) {
 					nodeAllocatableRes.Sub(task.Resreq)
 
-					glog.V(3).Infof("Binding Task <%v/%v> to node <%v>",
+					glog.V(3).Infof("xxxx Binding Task <%v/%v> to node <%v>",
 						task.Namespace, task.Name, node.Name)
 
 					if err := ssn.Allocate(task, node.Name, !task.Resreq.LessEqual(node.Idle)); err != nil {

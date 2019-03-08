@@ -65,10 +65,11 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 				}
 			} else {
 				// TODO (k82cn): backfill for other case.
+
 				// remove the top dog tasks that are not ready to run
 				for _, node := range ssn.Nodes {
 					for _, task := range node.Tasks {
-						if task.Status != api.Allocated {
+						if task.Status != api.Allocated && task.Status != api.AllocatedOverBackfill {
 							continue
 						}
 						if _, ok := ssn.TopDogReadyJobs[task.Job]; !ok {
@@ -99,7 +100,7 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 
 					isTopDog := false
 					for _, task := range job.Tasks {
-						glog.Infof("task %s has status %d, %d", task.Name, task.Status, api.Allocated)
+						glog.Infof("task %s has status %d vs %d (allocated), %d (pipelined)", task.Name, task.Status, api.Allocated, api.Pipelined)
 						if task.Status == api.Allocated {
 							isTopDog = true
 						}
