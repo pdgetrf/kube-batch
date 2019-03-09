@@ -94,9 +94,7 @@ func (alloc *preemptAction) Execute(ssn *framework.Session) {
 
 		// get the debt resource target
 		debtRes := node.Used.Clone()
-		glog.Infof("##### before %v %v", debtRes.MilliCPU, node.Used.MilliCPU)
 		debtRes.Sub(node.Capability)
-		glog.Infof("##### after %v %v", debtRes.MilliCPU, node.Used.MilliCPU)
 		for _, task := range node.Tasks {
 			if _, found := ssn.JobIndex[task.Job]; !found {
 				// do not handle irrelevant tasks

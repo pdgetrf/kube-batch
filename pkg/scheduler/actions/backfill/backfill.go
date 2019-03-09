@@ -67,6 +67,7 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 				// TODO (k82cn): backfill for other case.
 
 				// remove the top dog tasks that are not ready to run
+				unReadyTopDogs := make(map[api.JobID]*api.JobInfo)
 				for _, node := range ssn.Nodes {
 					for _, task := range node.Tasks {
 						if task.Status != api.Allocated && task.Status != api.AllocatedOverBackfill {
@@ -79,9 +80,11 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 									task.Namespace, task.Name, api.Pending, ssn.UID, err)
 							}
 
+							unReadyTopDogs[task.Job] = ssn.JobIndex[task.Job]
+
 							// remove the task from the node
 							node.RemoveTask(task)
-							glog.Infof("removed task %s from node, idle is %v", node.Idle)
+							glog.Infof("removed task %s from node, idle is %v", task.Name, node.Idle.MilliCPU)
 						}
 					}
 				}
@@ -93,6 +96,12 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 				for _, job := range ssn.Jobs {
 					// skip ready jobs
 					if ssn.JobReady(job) {
+						glog.Infof("xxxxx ignore ready job %s for backfill", job.Name)
+						continue
+					}
+
+					if _, found := unReadyTopDogs[job.UID]; found {
+						glog.Infof("xxxxx ignore unready top dog job %s for backfill", job.Name)
 						continue
 					}
 
@@ -120,7 +129,7 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 					return
 				}
 
-				glog.Infof("trying to backfill job %v", backfillJob)
+				glog.Infof("xxxxx trying to backfill job %v", backfillJob)
 
 				// allocate(backfill) the task
 				for _, task := range backfillJob.TaskStatusIndex[api.Pending] {

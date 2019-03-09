@@ -309,6 +309,7 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 		}
 	} else if ssn.JobReady(job) {
 		// top dog jobs using backfill resource is ready to run
+		glog.Infof("zzzz adding job %s to TopDogReadyJobs", job.Name)
 		ssn.TopDogReadyJobs[job.UID] = job
 	}
 

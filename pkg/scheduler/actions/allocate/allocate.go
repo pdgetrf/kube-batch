@@ -136,7 +136,7 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 					for _, task := range node.Tasks {
 						if task.IsBackfill {
 							backfilledRes.Add(task.Resreq)
-							glog.Infof("adding task %s to nodeAllocable", task.Name)
+							glog.Infof("zzzz adding task %s to nodeAllocable", task.Name)
 						}
 					}
 					nodeAllocatable[node.Name] = backfilledRes
@@ -151,11 +151,11 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 				}
 
 				// Allocate idle resource to the task.
-				glog.Infof("node.Idle = %v, node.Allocable = %v", node.Idle, nodeAllocatableRes)
+				glog.Infof("zzzz task = %s, node.Idle = %v, node.Allocable = %v", task.Name, node.Idle, nodeAllocatableRes)
 				if task.Resreq.LessEqual(nodeAllocatableRes) {
 					nodeAllocatableRes.Sub(task.Resreq)
 
-					glog.V(3).Infof("xxxx Binding Task <%v/%v> to node <%v>",
+					glog.V(3).Infof("Binding Task <%v/%v> to node <%v>",
 						task.Namespace, task.Name, node.Name)
 
 					if err := ssn.Allocate(task, node.Name, !task.Resreq.LessEqual(node.Idle)); err != nil {
@@ -173,19 +173,21 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 						task.Namespace, task.Name, node.Name)
 				}
 
-				// Allocate releasing resource to the task if any.
-				if task.Resreq.LessEqual(node.Releasing) {
-					glog.V(3).Infof("Pipelining Task <%v/%v> to node <%v> for <%v> on <%v>",
-						task.Namespace, task.Name, node.Name, task.Resreq, node.Releasing)
-					if err := ssn.Pipeline(task, node.Name); err != nil {
-						glog.Errorf("Failed to pipeline Task %v on %v in Session %v",
-							task.UID, node.Name, ssn.UID)
-						continue
-					}
+				/*
+					// Allocate releasing resource to the task if any.
+					if task.Resreq.LessEqual(node.Releasing) {
+						glog.V(3).Infof("Pipelining Task <%v/%v> to node <%v> for <%v> on <%v>",
+							task.Namespace, task.Name, node.Name, task.Resreq, node.Releasing)
+						if err := ssn.Pipeline(task, node.Name); err != nil {
+							glog.Errorf("Failed to pipeline Task %v on %v in Session %v",
+								task.UID, node.Name, ssn.UID)
+							continue
+						}
 
-					assigned = true
-					break
-				}
+						assigned = true
+						break
+					}
+				*/
 			}
 
 			if assigned {
