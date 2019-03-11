@@ -151,7 +151,7 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 				}
 
 				// Allocate idle resource to the task.
-				glog.Infof("zzzz task = %s, node.Idle = %v, node.Allocable = %v", task.Name, node.Idle, nodeAllocatableRes)
+				glog.Infof("task(%s): node.Idle = %v, node.Allocable = %v", task.Name, node.Idle, nodeAllocatableRes)
 				if task.Resreq.LessEqual(nodeAllocatableRes) {
 					nodeAllocatableRes.Sub(task.Resreq)
 

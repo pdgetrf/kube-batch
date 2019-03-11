@@ -268,7 +268,7 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 			glog.Errorf("Failed to update task <%v/%v> status to %v in Session <%v>: %v",
 				task.Namespace, task.Name, newStatus, ssn.UID, err)
 		} else {
-			glog.Infof("xxxx task %s status is set to %d %d", task.Name, task.Status, newStatus)
+			glog.Infof("Task %s status is set to %d", task.Name, task.Status)
 		}
 	} else {
 		glog.Errorf("Failed to found Job <%s> in Session <%s> index when binding.",
@@ -300,18 +300,18 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 	}
 
 	// do not dispatch when using backfilled task resource
-	if ssn.JobReady(job) && !usingBackfillTaskRes {
-		for _, task := range job.TaskStatusIndex[api.Allocated] {
-			if err := ssn.dispatch(task); err != nil {
-				glog.Errorf("Failed to dispatch task <%v/%v>: %v",
-					task.Namespace, task.Name, err)
+	if ssn.JobReady(job) {
+		// do not dispatch just yet when borrowing resources from backfilled jobs
+		if !usingBackfillTaskRes {
+			for _, task := range job.TaskStatusIndex[api.Allocated] {
+				if err := ssn.dispatch(task); err != nil {
+					glog.Errorf("Failed to dispatch task <%v/%v>: %v",
+						task.Namespace, task.Name, err)
+				}
 			}
 		}
 		ssn.TopDogReadyJobs[job.UID] = job
-	} else if ssn.JobReady(job) {
-		// top dog jobs using backfill resource is ready to run
-		glog.Infof("zzzz adding job %s to TopDogReadyJobs", job.Name)
-		ssn.TopDogReadyJobs[job.UID] = job
+		glog.Infof("added job %s as TopDogReadyJobs", job.Name)
 	}
 
 	return nil

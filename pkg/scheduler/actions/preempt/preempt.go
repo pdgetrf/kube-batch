@@ -86,11 +86,11 @@ func (alloc *preemptAction) Execute(ssn *framework.Session) {
 	}
 
 	// loop through all the node to preempt backfilled job
-	glog.Infof("##### top dog ready job = %v", ssn.TopDogReadyJobs)
+	glog.Infof("top dog ready job = %v", ssn.TopDogReadyJobs)
 	for _, node := range ssn.Nodes {
 
-		glog.Infof("##### node allocatable capacity %v | used: %v | idle: %v",
-			node.Allocatable.MilliCPU, node.Used.MilliCPU, node.Idle.MilliCPU)
+		glog.Infof("node allocatable capacity %v | used: %v | idle: %v",
+			node.Allocatable, node.Used, node.Idle)
 
 		// get the debt resource target
 		debtRes := node.Used.Clone()
@@ -106,11 +106,11 @@ func (alloc *preemptAction) Execute(ssn *framework.Session) {
 
 			if _, ok := ssn.TopDogReadyJobs[task.Job]; !ok {
 				debtRes.Sub(task.Resreq)
-				glog.Infof("##### reduced debt by task %s by %v to %v", task.Name, task.Resreq.MilliCPU, debtRes.MilliCPU)
+				glog.Infof("reduced debt by task %s by %v to %v", task.Name, task.Resreq.MilliCPU, debtRes.MilliCPU)
 			}
 		}
 
-		glog.Infof("##### debt is %v", debtRes.MilliCPU)
+		glog.Infof("resource debt on node %s is %v", node.Name, debtRes)
 
 		if debtRes.IsBelowZero() {
 			// skip this node if all resource usage is below capacity
@@ -148,7 +148,7 @@ func (alloc *preemptAction) Execute(ssn *framework.Session) {
 					preemptee.Namespace, preemptee.Name, err)
 				continue
 			} else {
-				glog.Infof("xxxx task %s will be preempted", preemptee.Name)
+				glog.Infof("task %s will be preempted on node", preemptee.Name)
 			}
 		}
 		stmt.Commit()

@@ -96,12 +96,12 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 				for _, job := range ssn.Jobs {
 					// skip ready jobs
 					if ssn.JobReady(job) {
-						glog.Infof("xxxxx ignore ready job %s for backfill", job.Name)
+						glog.Infof("ignored ready job %s for backfill", job.Name)
 						continue
 					}
 
 					if _, found := unReadyTopDogs[job.UID]; found {
-						glog.Infof("xxxxx ignore unready top dog job %s for backfill", job.Name)
+						glog.Infof("ignored non-ready top dog job %s for backfill", job.Name)
 						continue
 					}
 
@@ -113,7 +113,7 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 						}
 					}
 					if !allPending {
-						glog.Infof("xxxxx ignore non-pending job %s for backfill", job.Name)
+						glog.Infof("ignored non-pending job %s for backfill", job.Name)
 						continue
 					}
 
@@ -141,7 +141,7 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 					return
 				}
 
-				glog.Infof("xxxxx trying to backfill job %v", backfillJob)
+				glog.Infof("picked job %v to backfill", backfillJob)
 
 				// allocate(backfill) the task
 				for _, task := range backfillJob.TaskStatusIndex[api.Pending] {
