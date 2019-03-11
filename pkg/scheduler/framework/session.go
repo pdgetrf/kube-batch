@@ -165,7 +165,7 @@ func closeSession(ssn *Session) {
 func jobStatus(ssn *Session, jobInfo *api.JobInfo) v1alpha1.PodGroupStatus {
 	status := jobInfo.PodGroup.Status
 
-	glog.Info("pod group %s status condition is %v", jobInfo.Name, status.Conditions)
+	glog.Infof("pod group %s status condition is %v", jobInfo.Name, status.Conditions)
 
 	unschedulable := false
 	for _, c := range status.Conditions {
@@ -307,6 +307,7 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 					task.Namespace, task.Name, err)
 			}
 		}
+		ssn.TopDogReadyJobs[job.UID] = job
 	} else if ssn.JobReady(job) {
 		// top dog jobs using backfill resource is ready to run
 		glog.Infof("zzzz adding job %s to TopDogReadyJobs", job.Name)

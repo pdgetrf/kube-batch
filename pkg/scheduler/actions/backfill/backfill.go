@@ -105,6 +105,18 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 						continue
 					}
 
+					allPending := true
+					for _, task := range job.Tasks {
+						if task.Status != api.Pending {
+							allPending = false
+							break
+						}
+					}
+					if !allPending {
+						glog.Infof("xxxxx ignore non-pending job %s for backfill", job.Name)
+						continue
+					}
+
 					backfillJob = job
 
 					isTopDog := false
