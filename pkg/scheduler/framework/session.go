@@ -290,7 +290,6 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 	}
 
 	// Callbacks
-	// TODO: may need to fix (Peng)
 	for _, eh := range ssn.eventHandlers {
 		if eh.AllocateFunc != nil {
 			eh.AllocateFunc(&Event{
@@ -311,7 +310,7 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 			}
 		}
 		ssn.TopDogReadyJobs[job.UID] = job
-		glog.Infof("added job %s as TopDogReadyJobs", job.Name)
+		glog.Infof("marked job %s as TopDogReadyJobs", job.Name)
 	}
 
 	return nil

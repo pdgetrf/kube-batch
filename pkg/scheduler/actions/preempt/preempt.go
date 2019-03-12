@@ -85,7 +85,9 @@ func (alloc *preemptAction) Execute(ssn *framework.Session) {
 		}
 	}
 
-	// loop through all the node to preempt backfilled job
+	/*
+	 * remove some backfilled jobs for top dog jobs
+	 */
 	glog.Infof("top dog ready job = %v", ssn.TopDogReadyJobs)
 	for _, node := range ssn.Nodes {
 
@@ -148,7 +150,7 @@ func (alloc *preemptAction) Execute(ssn *framework.Session) {
 					preemptee.Namespace, preemptee.Name, err)
 				continue
 			} else {
-				glog.Infof("task %s will be preempted on node", preemptee.Name)
+				glog.Infof("task %s is preempted on node %s", preemptee.Name, node.Name)
 			}
 		}
 		stmt.Commit()

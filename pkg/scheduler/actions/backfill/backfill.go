@@ -64,8 +64,6 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 					break
 				}
 			} else {
-				// TODO (k82cn): backfill for other case.
-
 				// remove the top dog tasks that are not ready to run
 				unReadyTopDogs := make(map[api.JobID]*api.JobInfo)
 				for _, node := range ssn.Nodes {
@@ -118,19 +116,6 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 					}
 
 					backfillJob = job
-
-					isTopDog := false
-					for _, task := range job.Tasks {
-						glog.Infof("task %s has status %d vs %d (allocated), %d (pipelined)", task.Name, task.Status, api.Allocated, api.Pipelined)
-						if task.Status == api.Allocated {
-							isTopDog = true
-						}
-					}
-					if isTopDog {
-						backfillJob = nil
-						continue
-					}
-
 					if job.CreationTimestamp.After(backfillJob.CreationTimestamp.Time) {
 						backfillJob = job
 					}

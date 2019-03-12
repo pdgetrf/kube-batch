@@ -45,9 +45,6 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 	queues := util.NewPriorityQueue(ssn.QueueOrderFn)
 	jobsMap := map[api.QueueID]*util.PriorityQueue{}
 
-	// nodeAllocatable = Idle + backfilled - sum(top dogs)
-	nodeAllocatable := make(map[string]*api.Resource)
-
 	for _, job := range ssn.Jobs {
 
 		// sort jobs by queue and JobOrderFn
@@ -67,6 +64,9 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 	glog.V(3).Infof("Try to allocate resource to %d Queues", len(jobsMap))
 
 	pendingTasks := map[api.JobID]*util.PriorityQueue{}
+
+	// nodeAllocatable = Idle + backfilled
+	nodeAllocatable := make(map[string]*api.Resource)
 
 	for {
 		if queues.Empty() {
