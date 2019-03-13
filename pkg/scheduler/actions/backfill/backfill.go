@@ -41,98 +41,6 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 	glog.V(3).Infof("Enter Backfill ...")
 	defer glog.V(3).Infof("Leaving Backfill ...")
 
-	// remove the top dog tasks that are not ready to run
-	unReadyTopDogs := make(map[api.JobID]*api.JobInfo)
-	for _, node := range ssn.Nodes {
-		for _, task := range node.Tasks {
-			if task.Status != api.Allocated && task.Status != api.AllocatedOverBackfill {
-				continue
-			}
-			if _, ok := ssn.TopDogReadyJobs[task.Job]; !ok {
-				// change task status back to Pending
-				job := ssn.JobIndex[task.Job]
-				if err := job.UpdateTaskStatus(task, api.Pending); err != nil {
-					glog.Errorf("Failed to update task <%v/%v> status to %v in Session <%v>: %v",
-						task.Namespace, task.Name, api.Pending, ssn.UID, err)
-				}
-
-				unReadyTopDogs[task.Job] = ssn.JobIndex[task.Job]
-
-				// remove the task from the node
-				node.RemoveTask(task)
-				glog.Infof("removed task %s from node, idle is %v", task.Name, node.Idle.MilliCPU)
-			}
-		}
-	}
-
-	// pick a task to back fill
-	// hack: using the job created most recently for testing
-	// TODO: better way to pick backfill job
-	var backfillJob *api.JobInfo
-	backfillJob = nil
-	for _, job := range ssn.Jobs {
-		if backfillJob == nil {
-			backfillJob = job
-			continue
-		}
-
-		// skip ready jobs
-		if ssn.JobReady(job) {
-			glog.Infof("ignored ready job %s for backfill", job.Name)
-			continue
-		}
-
-		if _, found := unReadyTopDogs[job.UID]; found {
-			glog.Infof("ignored non-ready top dog job %s for backfill", job.Name)
-			continue
-		}
-
-		allPending := true
-		for _, task := range job.Tasks {
-			if task.Status != api.Pending {
-				allPending = false
-				break
-			}
-		}
-		if !allPending {
-			glog.Infof("ignored non-pending job %s for backfill", job.Name)
-			continue
-		}
-
-		if job.CreationTimestamp.After(backfillJob.CreationTimestamp.Time) {
-			backfillJob = job
-		}
-	}
-
-	if backfillJob == nil {
-		glog.Info("no job to backfill")
-		return
-	}
-
-	glog.Infof("picked job %v to backfill", backfillJob)
-
-	// allocate(backfill) the task
-	for _, task := range backfillJob.TaskStatusIndex[api.Pending] {
-		task.IsBackfill = true
-		for _, node := range ssn.Nodes {
-			if err := ssn.PredicateFn(task, node); err != nil {
-				glog.V(3).Infof("Predicates failed for task <%s/%s> on node <%s>: %v",
-					task.Namespace, task.Name, node.Name, err)
-				continue
-			}
-
-			if task.Resreq.LessEqual(node.Idle) {
-				glog.V(3).Infof("Binding Task <%v/%v> to node <%v>", task.Namespace, task.Name, node.Name)
-				if err := ssn.Allocate(task, node.Name, false); err != nil {
-					glog.Errorf("Failed to bind Task %v on %v in Session %v", task.UID, node.Name, ssn.UID)
-					continue
-				}
-			}
-
-			// TODO: should stop further task allocation here if job is ready?
-		}
-	}
-
 	// TODO (k82cn): When backfill, it's also need to balance between Queues.
 	for _, job := range ssn.Jobs {
 		for _, task := range job.TaskStatusIndex[api.Pending] {
@@ -159,6 +67,109 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 			}
 		}
 	}
+
+	unReadyTopDogJobs := getUnReadyTopDogJobs(ssn)
+	returnReservedResources(ssn, unReadyTopDogJobs)
+
+	for _, job := range ssn.Jobs {
+		if ! eligibleForBackFill(ssn, job, unReadyTopDogJobs) {
+			continue
+		}
+
+		glog.V(3).Infof("Back fill job %v", job)
+		backFill(ssn, job)
+	}
 }
 
 func (alloc *backfillAction) UnInitialize() {}
+
+func returnReservedResources(ssn *framework.Session, jobs map[api.JobID]*api.JobInfo) {
+	for _, job := range jobs {
+		glog.V(3).Infof("Returning resources allocated to unready Top Dog Job <%v/%v>", job.Namespace, job.Name)
+
+		for _, task := range job.Tasks {
+			if task.Status == api.Allocated || task.Status == api.AllocatedOverBackfill {
+				if err := job.UpdateTaskStatus(task, api.Pending); err != nil {
+					glog.Errorf("Failed to update task <%v/%v> status to %v in Session <%v>: %v",
+						task.Namespace, task.Name, api.Pending, ssn.UID, err)
+				}
+
+				node := ssn.NodeIndex[task.NodeName]
+				node.RemoveTask(task)
+				glog.V(4).Infof("Removed task %s from node %s. Idle: %+v; Used: %v; Releasing: %v.", task.Name, node.Name, node.Idle, node.Used, node.Releasing)
+			}
+		}
+	}
+}
+
+// TODO: Move this function to plugin
+func getUnReadyTopDogJobs(ssn *framework.Session) map[api.JobID]*api.JobInfo {
+	unReadyTopDogJobs := make(map[api.JobID]*api.JobInfo)
+
+	for _, job := range ssn.Jobs {
+		if _, ok := ssn.TopDogReadyJobs[job.UID]; !ok {
+			glog.V(3).Infof("Found unready Top Dog job <%v/%v>", job.Namespace, job.Name)
+			unReadyTopDogJobs[job.UID] = job
+		}
+	}
+
+	return unReadyTopDogJobs
+}
+
+func backFill(ssn *framework.Session, job *api.JobInfo) {
+	for _, task := range job.TaskStatusIndex[api.Pending] {
+		task.IsBackfill = true
+		for _, node := range ssn.Nodes {
+			if err := ssn.PredicateFn(task, node); err != nil {
+				glog.V(3).Infof("Predicates failed for task <%s/%s> on node <%s>: %v",
+					task.Namespace, task.Name, node.Name, err)
+				continue
+			}
+
+			if task.Resreq.LessEqual(node.Idle) {
+				glog.V(3).Infof("Binding Task <%v/%v> to node <%v>", task.Namespace, task.Name, node.Name)
+				if err := ssn.Allocate(task, node.Name, false); err != nil {
+					glog.Errorf("Failed to bind Task %v on %v in Session %v", task.UID, node.Name, ssn.UID)
+					continue
+				}
+			}
+		}
+	}
+
+	if ! ssn.JobReady(job) {
+		glog.V(3).Infof("Rolling back resources allocated to back fill job <%v/%v> because it is not ready to run", job.Namespace, job.Name)
+		for _, task := range job.TaskStatusIndex[api.Allocated]	{
+			node := ssn.NodeIndex[task.NodeName]
+			node.RemoveTask(task)
+			glog.V(3).Infof("Removed task <%v/%v> from node <%v>", task.Namespace, task.Name, node.Name)
+		}
+	}
+}
+
+// TODO: Move this function to plugin
+func eligibleForBackFill(ssn *framework.Session, job *api.JobInfo, unReadyTopDogs map[api.JobID]*api.JobInfo) bool {
+	// skip ready jobs
+	if ssn.JobReady(job) {
+		glog.Infof("ignored ready job %s for back fill", job.Name)
+		return false
+	}
+
+	if _, found := unReadyTopDogs[job.UID]; found {
+		glog.Infof("ignored non-ready top dog job %s for back fill", job.Name)
+		return false
+	}
+
+	allPending := true
+	for _, task := range job.Tasks {
+		if task.Status != api.Pending {
+			allPending = false
+			break
+		}
+	}
+	if !allPending {
+		glog.Infof("ignored non-pending job %s for back fill", job.Name)
+		return false
+	}
+
+	return true
+}
