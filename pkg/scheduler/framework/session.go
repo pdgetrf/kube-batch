@@ -43,9 +43,10 @@ type Session struct {
 	Queues  map[api.QueueID]*api.QueueInfo
 	Backlog []*api.JobInfo
 	Tiers   []conf.Tier
-	// to keep track of topdog jobs that are borrowing resources and ready to run
-	TopDogReadyJobs map[api.JobID]*api.JobInfo
-	Others          []*api.TaskInfo
+
+	//TopDogReadyJobs map[api.JobID]*api.JobInfo
+	//Others          []*api.TaskInfo
+	EnablePreemption bool
 
 	plugins        map[string]Plugin
 	eventHandlers  []*EventHandler
@@ -57,8 +58,9 @@ type Session struct {
 	preemptableFns map[string]api.EvictableFn
 	reclaimableFns map[string]api.EvictableFn
 	overusedFns    map[string]api.ValidateFn
-	jobReadyFns    map[string]api.ValidateFn
+	jobReadyFns    map[string]api.JobReadyFn
 	jobValidFns    map[string]api.ValidateExFn
+	backFillEligibleFns map[string]api.BackFillEligibleFn
 }
 
 func openSession(cache cache.Cache) *Session {
@@ -79,8 +81,9 @@ func openSession(cache cache.Cache) *Session {
 		preemptableFns: map[string]api.EvictableFn{},
 		reclaimableFns: map[string]api.EvictableFn{},
 		overusedFns:    map[string]api.ValidateFn{},
-		jobReadyFns:    map[string]api.ValidateFn{},
+		jobReadyFns:    map[string]api.JobReadyFn{},
 		jobValidFns:    map[string]api.ValidateExFn{},
+		backFillEligibleFns: map[string]api.BackFillEligibleFn{},
 	}
 
 	snapshot := cache.Snapshot()
@@ -110,7 +113,7 @@ func openSession(cache cache.Cache) *Session {
 	ssn.Nodes = snapshot.Nodes
 	ssn.Queues = snapshot.Queues
 
-	ssn.TopDogReadyJobs = map[api.JobID]*api.JobInfo{}
+	//ssn.TopDogReadyJobs = map[api.JobID]*api.JobInfo{}
 
 	glog.V(3).Infof("Open Session %v with <%d> Job and <%d> Queues",
 		ssn.UID, len(ssn.Jobs), len(ssn.Queues))
@@ -132,6 +135,13 @@ func closeSession(ssn *Session) {
 			glog.Errorf("Failed to update job <%s/%s>: %v",
 				job.Namespace, job.Name, err)
 		}
+
+		for _, task := range job.Tasks {
+			if api.IsBackfill(task.Pod) {
+				// TODO Terry: save backfill into pod annotations.
+				glog.V(3).Infof("patching Pod <%v/%v> as a backfill Pod", task.Pod.Namespace, task.Pod.Name)
+			}
+		}
 	}
 
 	ssn.Jobs = nil
@@ -145,12 +155,10 @@ func closeSession(ssn *Session) {
 	glog.V(3).Infof("Close Session %v", ssn.UID)
 }
 
-// very confusing function name!
-// this updates the PodGroup.Status in the job
 func jobStatus(ssn *Session, jobInfo *api.JobInfo) v1alpha1.PodGroupStatus {
 	status := jobInfo.PodGroup.Status
 
-	glog.Infof("pod group %s status condition is %v", jobInfo.Name, status.Conditions)
+	glog.Infof("pod group %s with status %v", jobInfo.Name, status)
 
 	unschedulable := false
 	for _, c := range status.Conditions {
@@ -164,19 +172,10 @@ func jobStatus(ssn *Session, jobInfo *api.JobInfo) v1alpha1.PodGroupStatus {
 	}
 
 	if len(jobInfo.TaskStatusIndex[api.Running]) != 0 && unschedulable {
-		// If running tasks && unschedulable, unknown phase
 		status.Phase = v1alpha1.PodGroupUnknown
 	} else {
-		// mark status to running or pending
-		allocated := 0
-		for status, tasks := range jobInfo.TaskStatusIndex {
-			if api.AllocatedStatus(status) {
-				allocated += len(tasks)
-			}
-		}
-
-		// If there're enough allocated resource, it's running
-		if int32(allocated) > jobInfo.PodGroup.Spec.MinMember {
+		// TODO Terry: Check GetReadiness() definition
+		if jobInfo.GetReadiness() == api.Ready {
 			status.Phase = v1alpha1.PodGroupRunning
 		} else {
 			status.Phase = v1alpha1.PodGroupPending
@@ -244,12 +243,11 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 		return err
 	}
 
-	glog.Infof("allocating job, usingBackFill: %v", usingBackfillTaskRes)
-
 	// Only update status in session
 	job, found := ssn.Jobs[task.Job]
 	if found {
 		newStatus := api.Allocated
+		// TODO Terry: Can we use Pipelined?
 		if usingBackfillTaskRes {
 			newStatus = api.AllocatedOverBackfill
 		}
@@ -257,8 +255,6 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 			glog.Errorf("Failed to update task <%v/%v> status to %v in Session <%v>: %v",
 				task.Namespace, task.Name, api.Allocated, ssn.UID, err)
 			return err
-		} else {
-			glog.Infof("Task %s status is set to %d", task.Name, task.Status)
 		}
 	} else {
 		glog.Errorf("Failed to found Job <%s> in Session <%s> index when binding.",
@@ -291,19 +287,14 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 		}
 	}
 
-	// do not dispatch when using backfilled task resource
 	if ssn.JobReady(job) {
-		// do not dispatch just yet when borrowing resources from backfilled jobs
-		if !usingBackfillTaskRes {
-			for _, task := range job.TaskStatusIndex[api.Allocated] {
-				if err := ssn.dispatch(task); err != nil {
-					glog.Errorf("Failed to dispatch task <%v/%v>: %v",
-						task.Namespace, task.Name, err)
-				}
+		for _, task := range job.TaskStatusIndex[api.Allocated] {
+			if err := ssn.dispatch(task); err != nil {
+				glog.Errorf("Failed to dispatch task <%v/%v>: %v",
+					task.Namespace, task.Name, err)
+				return err
 			}
 		}
-		ssn.TopDogReadyJobs[job.UID] = job
-		glog.Infof("marked job %s as TopDogReadyJobs", job.Name)
 	}
 
 	return nil

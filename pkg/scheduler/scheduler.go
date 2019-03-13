@@ -37,6 +37,7 @@ type Scheduler struct {
 	plugins        []conf.Tier
 	schedulerConf  string
 	schedulePeriod time.Duration
+	enablePreemption bool
 }
 
 func NewScheduler(
@@ -45,12 +46,14 @@ func NewScheduler(
 	conf string,
 	period time.Duration,
 	defaultQueue string,
+	enablePreemption bool,
 ) (*Scheduler, error) {
 	scheduler := &Scheduler{
 		config:         config,
 		schedulerConf:  conf,
 		cache:          schedcache.New(config, schedulerName, defaultQueue),
 		schedulePeriod: period,
+		enablePreemption: enablePreemption,
 	}
 
 	return scheduler, nil
@@ -88,6 +91,8 @@ func (pc *Scheduler) runOnce() {
 	defer metrics.UpdateE2eDuration(metrics.Duration(scheduleStartTime))
 
 	ssn := framework.OpenSession(pc.cache, pc.plugins)
+	ssn.EnablePreemption = pc.enablePreemption
+
 	defer framework.CloseSession(ssn)
 
 	glog.V(4).Infof("Start executing ...")
