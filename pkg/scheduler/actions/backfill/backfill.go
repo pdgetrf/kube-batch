@@ -68,46 +68,58 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 		}
 	}
 
-	unReadyTopDogJobs := getUnReadyTopDogJobs(ssn)
-	returnReservedResources(ssn, unReadyTopDogJobs)
-
+	// Collect back fill candidates
+	backFillCandidates := make([]*api.JobInfo, 0, len(ssn.Jobs))
 	for _, job := range ssn.Jobs {
-		if ! eligibleForBackFill(ssn, job, unReadyTopDogJobs) {
+		if ! eligibleForBackFill(job) {
 			continue
 		}
+		backFillCandidates = append(backFillCandidates, job)
+	}
 
-		glog.V(3).Infof("Back fill job %v", job)
+	// Release resources allocated to unready top dog jobs so that
+	// we can back fill more jobs in the next step.
+	unReadyTopDogJobs := getUnReadyTopDogJobs(ssn)
+	for _, job := range unReadyTopDogJobs {
+		releaseReservedResources(ssn, job)
+	}
+
+	// Back fill
+	for _, job := range backFillCandidates {
 		backFill(ssn, job)
 	}
 }
 
 func (alloc *backfillAction) UnInitialize() {}
 
-func returnReservedResources(ssn *framework.Session, jobs map[api.JobID]*api.JobInfo) {
-	for _, job := range jobs {
-		glog.V(3).Infof("Returning resources allocated to unready Top Dog Job <%v/%v>", job.Namespace, job.Name)
+// Releases resources allocated to the given job back to the cluster.
+func releaseReservedResources(ssn *framework.Session, job *api.JobInfo) {
+	glog.V(3).Infof("Releasing resources allocated to job <%v/%v>", job.Namespace, job.Name)
 
-		for _, task := range job.Tasks {
-			if task.Status == api.Allocated || task.Status == api.AllocatedOverBackfill {
-				if err := job.UpdateTaskStatus(task, api.Pending); err != nil {
-					glog.Errorf("Failed to update task <%v/%v> status to %v in Session <%v>: %v",
-						task.Namespace, task.Name, api.Pending, ssn.UID, err)
-				}
-
-				node := ssn.NodeIndex[task.NodeName]
-				node.RemoveTask(task)
-				glog.V(4).Infof("Removed task %s from node %s. Idle: %+v; Used: %v; Releasing: %v.", task.Name, node.Name, node.Idle, node.Used, node.Releasing)
+	for _, task := range job.Tasks {
+		if task.Status == api.Allocated || task.Status == api.AllocatedOverBackfill {
+			if err := job.UpdateTaskStatus(task, api.Pending); err != nil {
+				glog.Errorf("Failed to update task <%v/%v> status to %v in Session <%v>: %v",
+					task.Namespace, task.Name, api.Pending, ssn.UID, err)
 			}
+
+			node := ssn.NodeIndex[task.NodeName]
+			if err := node.RemoveTask(task); err != nil {
+				glog.Errorf("Failed to remove task %v from node %v: %s", task.Name, node.Name, err)
+				continue
+			}
+
+			glog.V(4).Infof("Removed task %s from node %s. Idle: %+v; Used: %v; Releasing: %v.", task.Name, node.Name, node.Idle, node.Used, node.Releasing)
 		}
 	}
 }
 
-// TODO: Move this function to plugin
+// TODO Terry: Move this function to plugin
 func getUnReadyTopDogJobs(ssn *framework.Session) map[api.JobID]*api.JobInfo {
 	unReadyTopDogJobs := make(map[api.JobID]*api.JobInfo)
 
 	for _, job := range ssn.Jobs {
-		if _, ok := ssn.TopDogReadyJobs[job.UID]; !ok {
+		if ! ssn.JobReady(job) && ! isPendingJob(job) {
 			glog.V(3).Infof("Found unready Top Dog job <%v/%v>", job.Namespace, job.Name)
 			unReadyTopDogJobs[job.UID] = job
 		}
@@ -117,6 +129,8 @@ func getUnReadyTopDogJobs(ssn *framework.Session) map[api.JobID]*api.JobInfo {
 }
 
 func backFill(ssn *framework.Session, job *api.JobInfo) {
+	glog.V(3).Infof("Back fill job <%v/%v>", job.Namespace, job.Name)
+
 	for _, task := range job.TaskStatusIndex[api.Pending] {
 		task.IsBackfill = true
 		for _, node := range ssn.Nodes {
@@ -129,7 +143,7 @@ func backFill(ssn *framework.Session, job *api.JobInfo) {
 			if task.Resreq.LessEqual(node.Idle) {
 				glog.V(3).Infof("Binding Task <%v/%v> to node <%v>", task.Namespace, task.Name, node.Name)
 				if err := ssn.Allocate(task, node.Name, false); err != nil {
-					glog.Errorf("Failed to bind Task %v on %v in Session %v", task.UID, node.Name, ssn.UID)
+					glog.Errorf("Failed to bind Task %v on %v in Session %v: %s", task.UID, node.Name, ssn.UID, err)
 					continue
 				}
 			}
@@ -137,28 +151,16 @@ func backFill(ssn *framework.Session, job *api.JobInfo) {
 	}
 
 	if ! ssn.JobReady(job) {
-		glog.V(3).Infof("Rolling back resources allocated to back fill job <%v/%v> because it is not ready to run", job.Namespace, job.Name)
-		for _, task := range job.TaskStatusIndex[api.Allocated]	{
-			node := ssn.NodeIndex[task.NodeName]
-			node.RemoveTask(task)
-			glog.V(3).Infof("Removed task <%v/%v> from node <%v>", task.Namespace, task.Name, node.Name)
-		}
+		releaseReservedResources(ssn, job)
 	}
 }
 
-// TODO: Move this function to plugin
-func eligibleForBackFill(ssn *framework.Session, job *api.JobInfo, unReadyTopDogs map[api.JobID]*api.JobInfo) bool {
-	// skip ready jobs
-	if ssn.JobReady(job) {
-		glog.Infof("ignored ready job %s for back fill", job.Name)
-		return false
-	}
+// TODO Terry: Move this function to plugin
+func eligibleForBackFill(job *api.JobInfo) bool {
+	return isPendingJob(job)
+}
 
-	if _, found := unReadyTopDogs[job.UID]; found {
-		glog.Infof("ignored non-ready top dog job %s for back fill", job.Name)
-		return false
-	}
-
+func isPendingJob(job *api.JobInfo) bool {
 	allPending := true
 	for _, task := range job.Tasks {
 		if task.Status != api.Pending {
@@ -166,10 +168,6 @@ func eligibleForBackFill(ssn *framework.Session, job *api.JobInfo, unReadyTopDog
 			break
 		}
 	}
-	if !allPending {
-		glog.Infof("ignored non-pending job %s for back fill", job.Name)
-		return false
-	}
 
-	return true
+	return allPending
 }

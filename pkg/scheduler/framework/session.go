@@ -300,6 +300,8 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 
 	// do not dispatch when using backfilled task resource
 	if ssn.JobReady(job) {
+		// TODO Terry: What if some allocated tasks use back fill resources?
+		// It is better to add usingBackfillTaskRes in TaskInfo
 		// do not dispatch just yet when borrowing resources from backfilled jobs
 		if !usingBackfillTaskRes {
 			for _, task := range job.TaskStatusIndex[api.Allocated] {
