@@ -130,8 +130,6 @@ func (fvb *fakeVolumeBinder) BindVolumes(task *api.TaskInfo) error {
 }
 
 func TestBackFill(t *testing.T) {
-	//framework.RegisterPluginBuilder("drf", drf.New)
-	//framework.RegisterPluginBuilder("proportion", proportion.New)
 	framework.RegisterPluginBuilder("gang", gang.New)
 	defer framework.CleanupPluginBuilders()
 

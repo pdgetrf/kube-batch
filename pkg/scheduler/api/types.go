@@ -105,3 +105,5 @@ type PredicateFn func(*TaskInfo, *NodeInfo) error
 
 // EvictableFn is the func declaration used to evict tasks.
 type EvictableFn func(*TaskInfo, []*TaskInfo) []*TaskInfo
+
+type BackFillEligibleFn func(interface{}) bool

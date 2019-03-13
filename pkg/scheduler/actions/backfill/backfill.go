@@ -71,7 +71,7 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 	// Collect back fill candidates
 	backFillCandidates := make([]*api.JobInfo, 0, len(ssn.Jobs))
 	for _, job := range ssn.Jobs {
-		if ! eligibleForBackFill(job) {
+		if ! ssn.BackFillEligible(job) {
 			continue
 		}
 		backFillCandidates = append(backFillCandidates, job)
@@ -79,18 +79,17 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 
 	// Release resources allocated to unready top dog jobs so that
 	// we can back fill more jobs in the next step.
-	unReadyTopDogJobs := getUnReadyTopDogJobs(ssn)
-	for _, job := range unReadyTopDogJobs {
-		releaseReservedResources(ssn, job)
+	for _, job := range ssn.Jobs {
+		if ! ssn.JobReady(job) && ! isPendingJob(job) {
+			glog.V(3).Infof("Found unready Top Dog job <%v/%v>", job.Namespace, job.Name)
+			releaseReservedResources(ssn, job)
+		}
 	}
 
-	// Back fill
 	for _, job := range backFillCandidates {
 		backFill(ssn, job)
 	}
 }
-
-func (alloc *backfillAction) UnInitialize() {}
 
 // Releases resources allocated to the given job back to the cluster.
 func releaseReservedResources(ssn *framework.Session, job *api.JobInfo) {
@@ -112,20 +111,6 @@ func releaseReservedResources(ssn *framework.Session, job *api.JobInfo) {
 			glog.V(4).Infof("Removed task %s from node %s. Idle: %+v; Used: %v; Releasing: %v.", task.Name, node.Name, node.Idle, node.Used, node.Releasing)
 		}
 	}
-}
-
-// TODO Terry: Move this function to plugin
-func getUnReadyTopDogJobs(ssn *framework.Session) map[api.JobID]*api.JobInfo {
-	unReadyTopDogJobs := make(map[api.JobID]*api.JobInfo)
-
-	for _, job := range ssn.Jobs {
-		if ! ssn.JobReady(job) && ! isPendingJob(job) {
-			glog.V(3).Infof("Found unready Top Dog job <%v/%v>", job.Namespace, job.Name)
-			unReadyTopDogJobs[job.UID] = job
-		}
-	}
-
-	return unReadyTopDogJobs
 }
 
 func backFill(ssn *framework.Session, job *api.JobInfo) {
@@ -155,11 +140,6 @@ func backFill(ssn *framework.Session, job *api.JobInfo) {
 	}
 }
 
-// TODO Terry: Move this function to plugin
-func eligibleForBackFill(job *api.JobInfo) bool {
-	return isPendingJob(job)
-}
-
 func isPendingJob(job *api.JobInfo) bool {
 	allPending := true
 	for _, task := range job.Tasks {
@@ -171,3 +151,5 @@ func isPendingJob(job *api.JobInfo) bool {
 
 	return allPending
 }
+
+func (alloc *backfillAction) UnInitialize() {}

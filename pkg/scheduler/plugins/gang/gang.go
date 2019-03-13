@@ -77,6 +77,20 @@ func jobReady(obj interface{}) bool {
 	return occupied >= job.MinAvailable
 }
 
+func backFillEligible(obj interface{}) bool {
+	job := obj.(*api.JobInfo)
+
+	allPending := true
+	for _, task := range job.Tasks {
+		if task.Status != api.Pending {
+			allPending = false
+			break
+		}
+	}
+
+	return allPending
+}
+
 func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
 	glog.V(3).Infof("In OnSessionOpen of gangPlugin")
 	validJobFn := func(obj interface{}) *api.ValidateResult {
@@ -127,6 +141,7 @@ func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
 	// TODO(k82cn): Support preempt/reclaim batch job.
 	ssn.AddReclaimableFn(gp.Name(), preemptableFn)
 	ssn.AddPreemptableFn(gp.Name(), preemptableFn)
+	ssn.AddBackFillEligibleFn(gp.Name(), backFillEligible)
 
 	jobOrderFn := func(l, r interface{}) int {
 		lv := l.(*api.JobInfo)

@@ -60,6 +60,7 @@ type Session struct {
 	overusedFns    map[string]api.ValidateFn
 	jobReadyFns    map[string]api.ValidateFn
 	jobValidFns    map[string]api.ValidateExFn
+	backFillEligibleFns map[string]api.BackFillEligibleFn
 }
 
 func openSession(cache cache.Cache) *Session {
@@ -80,6 +81,7 @@ func openSession(cache cache.Cache) *Session {
 		overusedFns:    map[string]api.ValidateFn{},
 		jobReadyFns:    map[string]api.ValidateFn{},
 		jobValidFns:    map[string]api.ValidateExFn{},
+		backFillEligibleFns: map[string]api.BackFillEligibleFn{},
 	}
 
 	snapshot := cache.Snapshot()
