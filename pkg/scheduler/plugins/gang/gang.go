@@ -201,7 +201,7 @@ func (gp *gangPlugin) OnSessionClose(ssn *framework.Session) {
 						LastTransitionTime: metav1.Now(),
 						TransitionID:       string(ssn.UID),
 					}
-					glog.Info("Marked 'backfilled' condition for job %s", job.Name)
+					glog.Info("marked 'backfilled' condition for job %s", job.Name)
 					break
 				}
 			}

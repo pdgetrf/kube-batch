@@ -127,6 +127,7 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
 				glog.V(3).Infof("Considering Task <%v/%v> on node <%v>: <%v> vs. <%v>",
 					task.Namespace, task.Name, node.Name, task.Resreq, node.Idle)
 
+				// TODO: move to node
 				if _, ok := nodeAllocatable[node.Name]; !ok {
 					backfilledRes := api.EmptyResource()
 
