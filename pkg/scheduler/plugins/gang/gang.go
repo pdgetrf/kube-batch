@@ -42,6 +42,7 @@ func (gp *gangPlugin) Name() string {
 
 // readyTaskNum return the number of tasks that are ready to run.
 func readyTaskNum(job *api.JobInfo) int32 {
+	// TODO Terry: Should Pipelined tasks be counted as ready tasks?
 	occupid := 0
 	for status, tasks := range job.TaskStatusIndex {
 		if api.AllocatedStatus(status) ||
@@ -52,6 +53,20 @@ func readyTaskNum(job *api.JobInfo) int32 {
 	}
 
 	return int32(occupid)
+}
+
+func almostReadyTaskNum(job *api.JobInfo) int32 {
+	taskCnt := 0
+	for status, tasks := range job.TaskStatusIndex {
+		if api.AllocatedStatus(status) ||
+			status == api.AllocatedOverBackfill ||
+			status == api.Succeeded ||
+			status == api.Pipelined {
+			taskCnt = taskCnt + len(tasks)
+		}
+	}
+
+	return int32(taskCnt)
 }
 
 // validTaskNum return the number of tasks that are valid.
@@ -69,12 +84,20 @@ func validTaskNum(job *api.JobInfo) int32 {
 	return int32(occupied)
 }
 
-func jobReady(obj interface{}) bool {
+func jobReady(obj interface{}) api.JobReadiness {
 	job := obj.(*api.JobInfo)
 
-	occupied := readyTaskNum(job)
+	taskCnt := almostReadyTaskNum(job)
+	switch {
+	case taskCnt < job.MinAvailable:
+		return api.NotReady
+	case taskCnt >= job.MinAvailable:
+		if readyTaskNum(job) >= job.MinAvailable {
+			return api.Ready
+		}
+	}
 
-	return occupied >= job.MinAvailable
+	return api.AlmostReady
 }
 
 func backFillEligible(obj interface{}) bool {
@@ -147,8 +170,9 @@ func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
 		lv := l.(*api.JobInfo)
 		rv := r.(*api.JobInfo)
 
-		lReady := jobReady(lv)
-		rReady := jobReady(rv)
+		// TODO Terry: Ready jobs should be ordered in front of Almost Ready jobs
+		lReady := jobReady(lv) == api.Ready
+		rReady := jobReady(rv) == api.Ready
 
 		glog.V(4).Infof("Gang JobOrderFn: <%v/%v> is ready: %t, <%v/%v> is ready: %t",
 			lv.Namespace, lv.Name, lReady, rv.Namespace, rv.Name, rReady)
@@ -194,7 +218,7 @@ func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
 func (gp *gangPlugin) OnSessionClose(ssn *framework.Session) {
 	for _, job := range ssn.Jobs {
 		jc := &v1alpha1.PodGroupCondition{}
-		if !jobReady(job) {
+		if jobReady(job) != api.Ready {
 			msg := fmt.Sprintf("%v/%v tasks in gang unschedulable: %v",
 				job.MinAvailable-readyTaskNum(job), len(job.Tasks), job.FitError())
 
@@ -216,7 +240,7 @@ func (gp *gangPlugin) OnSessionClose(ssn *framework.Session) {
 						LastTransitionTime: metav1.Now(),
 						TransitionID:       string(ssn.UID),
 					}
-					glog.Info("marked 'backfilled' condition for job %s", job.Name)
+					glog.Infof("marked 'backfilled' condition for job %s", job.Name)
 					break
 				}
 			}

@@ -80,7 +80,7 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 	// Release resources allocated to unready top dog jobs so that
 	// we can back fill more jobs in the next step.
 	for _, job := range ssn.Jobs {
-		if ! ssn.JobReady(job) && ! isPendingJob(job) {
+		if ! ssn.JobAlmostReady(job) && ! ssn.JobReady(job) {
 			glog.V(3).Infof("Found unready Top Dog job <%v/%v>", job.Namespace, job.Name)
 			releaseReservedResources(ssn, job)
 		}
@@ -138,18 +138,6 @@ func backFill(ssn *framework.Session, job *api.JobInfo) {
 	if ! ssn.JobReady(job) {
 		releaseReservedResources(ssn, job)
 	}
-}
-
-func isPendingJob(job *api.JobInfo) bool {
-	allPending := true
-	for _, task := range job.Tasks {
-		if task.Status != api.Pending {
-			allPending = false
-			break
-		}
-	}
-
-	return allPending
 }
 
 func (alloc *backfillAction) UnInitialize() {}

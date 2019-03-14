@@ -58,7 +58,7 @@ type Session struct {
 	preemptableFns map[string]api.EvictableFn
 	reclaimableFns map[string]api.EvictableFn
 	overusedFns    map[string]api.ValidateFn
-	jobReadyFns    map[string]api.ValidateFn
+	jobReadyFns    map[string]api.JobReadyFn
 	jobValidFns    map[string]api.ValidateExFn
 	backFillEligibleFns map[string]api.BackFillEligibleFn
 }
@@ -79,7 +79,7 @@ func openSession(cache cache.Cache) *Session {
 		preemptableFns: map[string]api.EvictableFn{},
 		reclaimableFns: map[string]api.EvictableFn{},
 		overusedFns:    map[string]api.ValidateFn{},
-		jobReadyFns:    map[string]api.ValidateFn{},
+		jobReadyFns:    map[string]api.JobReadyFn{},
 		jobValidFns:    map[string]api.ValidateExFn{},
 		backFillEligibleFns: map[string]api.BackFillEligibleFn{},
 	}
@@ -302,18 +302,13 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 
 	// do not dispatch when using backfilled task resource
 	if ssn.JobReady(job) {
-		// TODO Terry: What if some allocated tasks use back fill resources?
-		// It is better to add usingBackfillTaskRes in TaskInfo
-		// do not dispatch just yet when borrowing resources from backfilled jobs
-		if !usingBackfillTaskRes {
-			for _, task := range job.TaskStatusIndex[api.Allocated] {
-				if err := ssn.dispatch(task); err != nil {
-					glog.Errorf("Failed to dispatch task <%v/%v>: %v",
-						task.Namespace, task.Name, err)
-				}
+		for _, task := range job.TaskStatusIndex[api.Allocated] {
+			if err := ssn.dispatch(task); err != nil {
+				glog.Errorf("Failed to dispatch task <%v/%v>: %v",
+					task.Namespace, task.Name, err)
 			}
 		}
-		ssn.TopDogReadyJobs[job.UID] = job
+		//ssn.TopDogReadyJobs[job.UID] = job
 		glog.Infof("marked job %s as TopDogReadyJobs", job.Name)
 	}
 

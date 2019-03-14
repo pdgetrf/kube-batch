@@ -62,7 +62,7 @@ func getTaskStatus(pod *v1.Pod) TaskStatus {
 
 func AllocatedStatus(status TaskStatus) bool {
 	switch status {
-	case Bound, Binding, Running, Allocated, AllocatedOverBackfill:
+	case Bound, Binding, Running, Allocated:
 		return true
 	default:
 		return false
