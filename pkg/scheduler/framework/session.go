@@ -308,8 +308,6 @@ func (ssn *Session) Allocate(task *api.TaskInfo, hostname string, usingBackfillT
 					task.Namespace, task.Name, err)
 			}
 		}
-		//ssn.TopDogReadyJobs[job.UID] = job
-		glog.Infof("marked job %s as TopDogReadyJobs", job.Name)
 	}
 
 	return nil

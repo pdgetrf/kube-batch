@@ -131,11 +131,13 @@ func backFill(ssn *framework.Session, job *api.JobInfo) {
 					glog.Errorf("Failed to bind Task %v on %v in Session %v: %s", task.UID, node.Name, ssn.UID, err)
 					continue
 				}
+				break
 			}
 		}
 	}
 
 	if ! ssn.JobReady(job) {
+		glog.V(3).Infof("Job <%v/%v> is not ready. Release its resources.", job.Namespace, job.Name)
 		releaseReservedResources(ssn, job)
 	}
 }
