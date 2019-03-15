@@ -18,6 +18,7 @@ package preempt
 
 import (
 	"fmt"
+	"k8s.io/api/core/v1"
 
 	"github.com/golang/glog"
 
@@ -113,7 +114,7 @@ func (alloc *preemptAction) Execute(ssn *framework.Session) {
 
 		glog.Infof("resource debt on node %s is %v", node.Name, debtRes)
 
-		if debtRes.IsBelowZero() {
+		if debtRes.IsBelowZero() || debtRes.IsZero(v1.ResourceCPU) {
 			// skip this node if all resource usage is below capacity
 			glog.Infof("no need to preempt on node %s", node.Name)
 			continue
