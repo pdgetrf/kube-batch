@@ -56,6 +56,25 @@ const (
 	Unknown
 )
 
+type JobReadiness int
+
+const (
+	// A job is Ready if the number of tasks in Allocated state
+	// exceeds the job's minimum task number requirement. In other words,
+	// #(Allocated Tasks) >= Job.MinAvailable
+	// A Ready job can be dispatch to a node right away.
+	Ready JobReadiness = 1 << iota
+
+	// A job is Almost Ready if the job is not Ready, but the number of tasks in Allocated
+	// state exceeds the job's minim task number requirement. In other words,
+	// #(Allocated Tasks) < Job.MinAvailable &&
+	// #(Allocated Tasks) + #(AllocatedOverBackFill Tasks) >= Job.MinAvailable
+	AlmostReady
+
+	// #(Allocated Tasks) + #(AllocatedOverBackFill Tasks) < Job.MinAvailable
+	NotReady
+)
+
 func (ts TaskStatus) String() string {
 	switch ts {
 	case Pending:
@@ -91,6 +110,8 @@ type CompareFn func(interface{}, interface{}) int
 // ValidateFn is the func declaration used to check object's status.
 type ValidateFn func(interface{}) bool
 
+type JobReadyFn func(interface{}) JobReadiness
+
 //
 type ValidateResult struct {
 	Pass    bool
@@ -105,3 +126,5 @@ type PredicateFn func(*TaskInfo, *NodeInfo) error
 
 // EvictableFn is the func declaration used to evict tasks.
 type EvictableFn func(*TaskInfo, []*TaskInfo) []*TaskInfo
+
+type BackFillEligibleFn func(interface{}) bool

@@ -73,12 +73,13 @@ func NewNodeInfo(node *v1.Node) *NodeInfo {
 
 func (ni *NodeInfo) Clone() *NodeInfo {
 	res := NewNodeInfo(ni.Node)
-	glog.Infof("new node: capability %v,  allocatable %v, idle %v, used %v", ni.Capability.MilliCPU,
+	glog.V(3).Infof("new node <%v>: capability %v,  allocatable %v, idle %v, used %v", ni.Name, ni.Capability.MilliCPU,
 		ni.Allocatable.MilliCPU,
 		ni.Idle.MilliCPU,
 		ni.Used.MilliCPU)
 
 	for _, p := range ni.Tasks {
+		glog.V(4).Infof("Adding task <%v/%v> to node <%v> with resource request %v", p.Namespace, p.Name, ni.Name, p.Resreq)
 		res.AddTask(p)
 	}
 

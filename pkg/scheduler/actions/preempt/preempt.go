@@ -18,6 +18,7 @@ package preempt
 
 import (
 	"fmt"
+	"k8s.io/api/core/v1"
 
 	"github.com/golang/glog"
 
@@ -88,7 +89,6 @@ func (alloc *preemptAction) Execute(ssn *framework.Session) {
 	/*
 	 * remove some backfilled jobs for top dog jobs
 	 */
-	glog.Infof("top dog ready job = %v", ssn.TopDogReadyJobs)
 	for _, node := range ssn.Nodes {
 
 		glog.Infof("node allocatable capacity %v | used: %v | idle: %v",
@@ -106,7 +106,7 @@ func (alloc *preemptAction) Execute(ssn *framework.Session) {
 				continue
 			}
 
-			if _, ok := ssn.TopDogReadyJobs[task.Job]; !ok {
+			if ! ssn.JobReady(ssn.JobIndex[task.Job]) && ! ssn.JobAlmostReady(ssn.JobIndex[task.Job]) {
 				debtRes.Sub(task.Resreq)
 				glog.Infof("reduced debt by task %s by %v to %v", task.Name, task.Resreq.MilliCPU, debtRes.MilliCPU)
 			}
@@ -114,7 +114,7 @@ func (alloc *preemptAction) Execute(ssn *framework.Session) {
 
 		glog.Infof("resource debt on node %s is %v", node.Name, debtRes)
 
-		if debtRes.IsBelowZero() {
+		if debtRes.IsBelowZero() || debtRes.IsZero(v1.ResourceCPU) {
 			// skip this node if all resource usage is below capacity
 			glog.Infof("no need to preempt on node %s", node.Name)
 			continue
