@@ -112,21 +112,20 @@ func (alloc *preemptAction) Execute(ssn *framework.Session) {
 				glog.V(3).Infof("Considering preemptor <%s/%s> with status %s",
 					preemptor.Namespace, preemptor.Name, preemptor.Status)
 
-				if preempted, _ := preempt(ssn, stmt, preemptor, ssn.Nodes,
-					func(task *api.TaskInfo) bool {
-						// Ignore non running task.
-						if task.Status != api.Running {
-							return false
-						}
+				if preempted, _ := preempt(ssn, stmt, preemptor, ssn.Nodes, func(task *api.TaskInfo) bool {
+					// Ignore non running task.
+					if task.Status != api.Running {
+						return false
+					}
 
-						job, found := ssn.Jobs[task.Job]
-						if !found {
-							return false
-						}
-						// Preempt other jobs within queue
-						// same queue, different job
-						return job.Queue == preemptorJob.Queue && preemptor.Job != task.Job
-					}); preempted {
+					job, found := ssn.Jobs[task.Job]
+					if !found {
+						return false
+					}
+					// Preempt other jobs within queue
+					// same queue, different job
+					return job.Queue == preemptorJob.Queue && preemptor.Job != task.Job
+				}); preempted {
 					assigned = true
 				}
 

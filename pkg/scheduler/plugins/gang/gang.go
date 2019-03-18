@@ -43,6 +43,19 @@ func (gp *gangPlugin) Name() string {
 	return "gang"
 }
 
+func readyTaskNum(job *api.JobInfo) int32 {
+	occupid := 0
+	for status, tasks := range job.TaskStatusIndex {
+		if api.AllocatedStatus(status) ||
+			status == api.Succeeded ||
+			status == api.Pipelined {
+			occupid = occupid + len(tasks)
+		}
+	}
+
+	return int32(occupid)
+}
+
 // validTaskNum return the number of tasks that are valid.
 func validTaskNum(job *api.JobInfo) int32 {
 	occupied := 0
@@ -60,9 +73,12 @@ func validTaskNum(job *api.JobInfo) int32 {
 }
 
 // TODO Terry: Remove this function
-func jobReady(obj interface{}) api.JobReadiness {
+func jobReady(obj interface{}) bool {
 	job := obj.(*api.JobInfo)
-	return job.GetReadiness()
+
+	occupied := readyTaskNum(job)
+
+	return occupied >= job.MinAvailable
 }
 
 func backFillEligible(obj interface{}) bool {
@@ -112,7 +128,6 @@ func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
 			job := ssn.Jobs[preemptee.Job]
 
 			// TODO Terry: Bug? Why job.MinAvailable == 1 makes the task preemptable?
-			// preemptable := job.MinAvailable <= readyTaskNum(job)-1 && preemptor.Priority > job.Priority
 			preemptable := job.MinAvailable <= readyTaskNum(job)-1 || job.MinAvailable == 1
 
 			if !preemptable {
@@ -138,8 +153,8 @@ func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
 		rv := r.(*api.JobInfo)
 
 		// TODO Terry: Almost Ready jobs should be ordered in front of Not Ready jobs
-		lReady := jobReady(lv) == api.Ready
-		rReady := jobReady(rv) == api.Ready
+		lReady := jobReady(lv)
+		rReady := jobReady(rv)
 
 		glog.V(4).Infof("Gang JobOrderFn: <%v/%v> is ready: %t, <%v/%v> is ready: %t",
 			lv.Namespace, lv.Name, lReady, rv.Namespace, rv.Name, rReady)
@@ -168,7 +183,7 @@ func (gp *gangPlugin) OnSessionClose(ssn *framework.Session) {
 	var unScheduleJobCount int
 	for _, job := range ssn.Jobs {
 		jc := &v1alpha1.PodGroupCondition{}
-		if jobReady(job) != api.Ready {
+		if ! jobReady(job) {
 			unreadyTaskCount = job.MinAvailable - readyTaskNum(job)
 			msg := fmt.Sprintf("%v/%v tasks in gang unschedulable: %v",
 				job.MinAvailable-readyTaskNum(job), len(job.Tasks), job.FitError())
@@ -209,14 +224,3 @@ func (gp *gangPlugin) OnSessionClose(ssn *framework.Session) {
 	metrics.UpdateUnscheduleJobCount(unScheduleJobCount)
 }
 
-func readyTaskNum(job *api.JobInfo) int32 {
-	cnt := 0
-	for status, tasks := range job.TaskStatusIndex {
-		if api.AllocatedStatus(status) ||
-			status == api.Succeeded ||
-			status == api.Pipelined {
-			cnt = cnt + len(tasks)
-		}
-	}
-	return int32(cnt)
-}

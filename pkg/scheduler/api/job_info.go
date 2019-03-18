@@ -239,7 +239,8 @@ func (ji *JobInfo) addTaskIndex(ti *TaskInfo) {
 func (ji *JobInfo) AddTaskInfo(ti *TaskInfo) {
 	ji.Tasks[ti.UID] = ti
 	ji.addTaskIndex(ti)
-	ji.Priority = *ti.Pod.Spec.Priority
+	// TODO Terry: Uncomment this line will break Job Priority integration test
+	//ji.Priority = *ti.Pod.Spec.Priority
 
 	ji.TotalRequest.Add(ti.Resreq)
 

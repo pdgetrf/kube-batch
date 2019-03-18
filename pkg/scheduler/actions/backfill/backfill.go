@@ -128,7 +128,7 @@ func backFill(ssn *framework.Session, job *api.JobInfo) {
 				continue
 			}
 
-			if task.Resreq.LessEqual(node.Idle) {
+			if task.InitResreq.LessEqual(node.Idle) {
 				task.IsBackfill = true
 				glog.V(3).Infof("Binding backfill task <%v/%v> to node <%v>", task.Namespace, task.Name, node.Name)
 				if err := ssn.Allocate(task, node.Name, false); err != nil {

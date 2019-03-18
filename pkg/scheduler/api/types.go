@@ -124,9 +124,8 @@ type CompareFn func(interface{}, interface{}) int
 // ValidateFn is the func declaration used to check object's status.
 type ValidateFn func(interface{}) bool
 
-type JobReadyFn func(interface{}) JobReadiness
+//type JobReadyFn func(interface{}) JobReadiness
 
-//
 type ValidateResult struct {
 	Pass    bool
 	Reason  string

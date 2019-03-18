@@ -43,9 +43,6 @@ type Session struct {
 	Queues  map[api.QueueID]*api.QueueInfo
 	Backlog []*api.JobInfo
 	Tiers   []conf.Tier
-
-	//TopDogReadyJobs map[api.JobID]*api.JobInfo
-	//Others          []*api.TaskInfo
 	EnablePreemption bool
 
 	plugins        map[string]Plugin
@@ -58,7 +55,7 @@ type Session struct {
 	preemptableFns map[string]api.EvictableFn
 	reclaimableFns map[string]api.EvictableFn
 	overusedFns    map[string]api.ValidateFn
-	jobReadyFns    map[string]api.JobReadyFn
+	jobReadyFns    map[string]api.ValidateFn
 	jobValidFns    map[string]api.ValidateExFn
 	backFillEligibleFns map[string]api.BackFillEligibleFn
 }
@@ -81,7 +78,7 @@ func openSession(cache cache.Cache) *Session {
 		preemptableFns: map[string]api.EvictableFn{},
 		reclaimableFns: map[string]api.EvictableFn{},
 		overusedFns:    map[string]api.ValidateFn{},
-		jobReadyFns:    map[string]api.JobReadyFn{},
+		jobReadyFns:    map[string]api.ValidateFn{},
 		jobValidFns:    map[string]api.ValidateExFn{},
 		backFillEligibleFns: map[string]api.BackFillEligibleFn{},
 	}
@@ -112,8 +109,6 @@ func openSession(cache cache.Cache) *Session {
 
 	ssn.Nodes = snapshot.Nodes
 	ssn.Queues = snapshot.Queues
-
-	//ssn.TopDogReadyJobs = map[api.JobID]*api.JobInfo{}
 
 	glog.V(3).Infof("Open Session %v with <%d> Job and <%d> Queues",
 		ssn.UID, len(ssn.Jobs), len(ssn.Queues))
@@ -158,8 +153,6 @@ func closeSession(ssn *Session) {
 func jobStatus(ssn *Session, jobInfo *api.JobInfo) v1alpha1.PodGroupStatus {
 	status := jobInfo.PodGroup.Status
 
-	glog.Infof("pod group %s with status %v", jobInfo.Name, status)
-
 	unschedulable := false
 	for _, c := range status.Conditions {
 		if c.Type == v1alpha1.PodGroupUnschedulableType &&
@@ -171,18 +164,26 @@ func jobStatus(ssn *Session, jobInfo *api.JobInfo) v1alpha1.PodGroupStatus {
 		}
 	}
 
+	// If running tasks && unschedulable, unknown phase
 	if len(jobInfo.TaskStatusIndex[api.Running]) != 0 && unschedulable {
 		status.Phase = v1alpha1.PodGroupUnknown
 	} else {
-		// TODO Terry: Check GetReadiness() definition
-		if jobInfo.GetReadiness() == api.Ready {
+		// TODO Terry: Replace with Job.GetReadiness()
+		allocated := 0
+		for status, tasks := range jobInfo.TaskStatusIndex {
+			if api.AllocatedStatus(status) {
+				allocated += len(tasks)
+			}
+		}
+
+		// If there're enough allocated resource, it's running
+		if int32(allocated) > jobInfo.PodGroup.Spec.MinMember {
 			status.Phase = v1alpha1.PodGroupRunning
 		} else {
 			status.Phase = v1alpha1.PodGroupPending
 		}
 	}
 
-	// statistics of tasks in different status
 	status.Running = int32(len(jobInfo.TaskStatusIndex[api.Running]))
 	status.Failed = int32(len(jobInfo.TaskStatusIndex[api.Failed]))
 	status.Succeeded = int32(len(jobInfo.TaskStatusIndex[api.Succeeded]))

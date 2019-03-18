@@ -517,21 +517,6 @@ func (sc *SchedulerCache) Snapshot() *kbapi.ClusterInfo {
 		Queues: make(map[kbapi.QueueID]*kbapi.QueueInfo),
 	}
 
-	// collect the jobs that were backfilled
-	//backfilledJob := make(map[api.JobID]*kbapi.JobInfo)
-	//for _, job := range sc.Jobs {
-	//	if job.PodGroup == nil {
-	//		continue
-	//	}
-	//
-	//	for _, cond := range job.PodGroup.Status.Conditions {
-	//		if cond.Type == v1alpha1.PodGroupBackfilledType {
-	//			backfilledJob[job.UID] = job
-	//			break
-	//		}
-	//	}
-	//}
-
 	for _, value := range sc.Nodes {
 		snapshot.Nodes[value.Name] = value.Clone()
 	}

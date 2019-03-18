@@ -40,7 +40,7 @@ func (ssn *Session) AddReclaimableFn(name string, rf api.EvictableFn) {
 	ssn.reclaimableFns[name] = rf
 }
 
-func (ssn *Session) AddJobReadyFn(name string, vf api.JobReadyFn) {
+func (ssn *Session) AddJobReadyFn(name string, vf api.ValidateFn) {
 	ssn.jobReadyFns[name] = vf
 }
 
@@ -165,8 +165,6 @@ func (ssn *Session) Overused(queue *api.QueueInfo) bool {
 
 // TODO Terry: Move JobReady into JobInfo?
 func (ssn *Session) JobReady(obj interface{}) bool {
-	status := api.Ready
-
 	for _, tier := range ssn.Tiers {
 		for _, plugin := range tier.Plugins {
 			if plugin.JobReadyDisabled {
@@ -177,34 +175,35 @@ func (ssn *Session) JobReady(obj interface{}) bool {
 				continue
 			}
 
-			status = jrf(obj)
-			break
+			if !jrf(obj) {
+				return false
+			}
 		}
 	}
 
-	return status == api.Ready
+	return true
 }
 
-func (ssn *Session) JobAlmostReady(obj interface{}) bool {
-	status := api.AlmostReady
-
-	for _, tier := range ssn.Tiers {
-		for _, plugin := range tier.Plugins {
-			if plugin.JobReadyDisabled {
-				continue
-			}
-			jrf, found := ssn.jobReadyFns[plugin.Name]
-			if !found {
-				continue
-			}
-
-			status = jrf(obj)
-			break
-		}
-	}
-
-	return status == api.AlmostReady
-}
+//func (ssn *Session) JobAlmostReady(obj interface{}) bool {
+//	status := api.AlmostReady
+//
+//	for _, tier := range ssn.Tiers {
+//		for _, plugin := range tier.Plugins {
+//			if plugin.JobReadyDisabled {
+//				continue
+//			}
+//			jrf, found := ssn.jobReadyFns[plugin.Name]
+//			if !found {
+//				continue
+//			}
+//
+//			status = jrf(obj)
+//			break
+//		}
+//	}
+//
+//	return status == api.AlmostReady
+//}
 
 func (ssn *Session) BackFillEligible(obj interface{}) bool {
 	for _, tier := range ssn.Tiers {

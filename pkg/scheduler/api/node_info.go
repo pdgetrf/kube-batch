@@ -207,5 +207,7 @@ func (ni *NodeInfo) Pods() (pods []*v1.Pod) {
 }
 
 func (ni *NodeInfo) GetAccessibleResource() *Resource {
-	return ni.Idle.Add(ni.Backfilled).Clone()
+	accessible := ni.Idle.Add(ni.Backfilled).Clone()
+	glog.V(4).Infof("Accessible resources on Node <%v>: %v. Idle: %v. Backfilled: %v", ni.Name, accessible, ni.Idle, ni.Backfilled)
+	return accessible
 }
