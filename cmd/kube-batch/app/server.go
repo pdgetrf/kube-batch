@@ -73,7 +73,8 @@ func Run(opt *options.ServerOption) error {
 		opt.SchedulerConf,
 		opt.SchedulePeriod,
 		opt.DefaultQueue,
-		opt.EnablePreemption)
+		opt.EnablePreemption,
+		opt.EnableBackfill)
 	if err != nil {
 		panic(err)
 	}

@@ -43,6 +43,7 @@ type ServerOption struct {
 	PrintVersion         bool
 	ListenAddress        string
 	EnablePreemption     bool
+	EnableBackfill		 bool
 }
 
 // NewServerOption creates a new CMServer with a default config.
@@ -67,6 +68,7 @@ func (s *ServerOption) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&s.LockObjectNamespace, "lock-object-namespace", s.LockObjectNamespace, "Define the namespace of the lock object")
 	fs.StringVar(&s.ListenAddress, "listen-address", defaultListenAddress, "The address to listen on for HTTP requests.")
 	fs.BoolVar(&s.EnablePreemption, "enable-preemption", false, "Enable preemption")
+	fs.BoolVar(&s.EnableBackfill, "enable-backfill", false, "Enable backfill")
 }
 
 func (s *ServerOption) CheckOptionOrDie() error {

@@ -69,30 +69,33 @@ func (alloc *backfillAction) Execute(ssn *framework.Session) {
 		}
 	}
 
-	// TODO Terry: disable backfill temporarily
-	/*
-	// Collect back fill candidates
-	backFillCandidates := make([]*api.JobInfo, 0, len(ssn.Jobs))
-	for _, job := range ssn.Jobs {
-		if ! ssn.BackFillEligible(job) {
-			continue
+	//if ssn.EnableBackfill {
+		// Collect back fill candidates
+		backFillCandidates := make([]*api.JobInfo, 0, len(ssn.Jobs))
+		for _, job := range ssn.Jobs {
+			if ! ssn.BackFillEligible(job) {
+				continue
+			}
+			backFillCandidates = append(backFillCandidates, job)
 		}
-		backFillCandidates = append(backFillCandidates, job)
-	}
 
-	// Release resources allocated to unready top dog jobs so that
-	// we can back fill more jobs in the next step.
-	for _, job := range ssn.Jobs {
-		if ! ssn.JobAlmostReady(job) && ! ssn.JobReady(job) {
-			glog.V(3).Infof("Found unready Top Dog job <%v/%v>", job.Namespace, job.Name)
-			releaseReservedResources(ssn, job)
+		// Release resources allocated to unready top dog jobs so that
+		// we can back fill more jobs in the next step.
+		resourceReleased := false
+		for _, job := range ssn.Jobs {
+			if ! ssn.JobReady(job) && job.GetReadiness() != api.AlmostReady {
+				glog.V(3).Infof("Found unready Top Dog job <%v/%v>", job.Namespace, job.Name)
+				releaseReservedResources(ssn, job)
+				resourceReleased = true
+			}
 		}
-	}
 
-	for _, job := range backFillCandidates {
-		backFill(ssn, job)
-	}
-	*/
+		if resourceReleased {
+			for _, job := range backFillCandidates {
+				backFill(ssn, job)
+			}
+		}
+	//}
 }
 
 // Releases resources allocated to the given job back to the cluster.

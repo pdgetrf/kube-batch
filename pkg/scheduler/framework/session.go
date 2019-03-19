@@ -44,6 +44,7 @@ type Session struct {
 	Backlog []*api.JobInfo
 	Tiers   []conf.Tier
 	EnablePreemption bool
+	EnableBackfill bool
 
 	plugins        map[string]Plugin
 	eventHandlers  []*EventHandler

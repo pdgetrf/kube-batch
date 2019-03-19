@@ -121,8 +121,8 @@ func (alloc *reclaimAction) Execute(ssn *framework.Session) {
 			resreq := task.InitResreq.Clone()
 			reclaimed := api.EmptyResource()
 
-			glog.V(3).Infof("Considering Task <%s/%s> on Node <%s>.",
-				task.Namespace, task.Name, n.Name)
+			glog.V(3).Infof("Considering Task <%s/%s> in queue %s on Node <%s>.",
+				task.Namespace, task.Name, queue.Name, n.Name)
 
 			var reclaimees []*api.TaskInfo
 			for _, task := range n.Tasks {

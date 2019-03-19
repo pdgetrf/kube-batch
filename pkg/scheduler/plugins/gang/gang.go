@@ -44,6 +44,7 @@ func (gp *gangPlugin) Name() string {
 }
 
 func readyTaskNum(job *api.JobInfo) int32 {
+	// TODO Terry: Why is Pipelined counted as a ready status?
 	occupid := 0
 	for status, tasks := range job.TaskStatusIndex {
 		if api.AllocatedStatus(status) ||

@@ -18,8 +18,13 @@ package backfill
 
 import (
 	"fmt"
+	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/cache"
+	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/conf"
 	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/plugins/gang"
+	"reflect"
+	"time"
 
+	"k8s.io/client-go/tools/record"
 	kbv1 "github.com/kubernetes-sigs/kube-batch/pkg/apis/scheduling/v1alpha1"
 	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/api"
 	"github.com/kubernetes-sigs/kube-batch/pkg/scheduler/framework"
@@ -126,127 +131,128 @@ func TestBackFill(t *testing.T) {
 	framework.RegisterPluginBuilder("gang", gang.New)
 	defer framework.CleanupPluginBuilders()
 
-	//tests := []struct {
-	//	name      string
-	//	podGroups []*kbv1.PodGroup
-	//	pods      []*v1.Pod
-	//	nodes     []*v1.Node
-	//	queues    []*kbv1.Queue
-	//	expected  map[string]string
-	//}{
-	//	{
-	//		name: "two jobs with one node",
-	//		podGroups: []*kbv1.PodGroup{
-	//			{
-	//				ObjectMeta: metav1.ObjectMeta{
-	//					Name:      "pg1",
-	//					Namespace: "c1",
-	//				},
-	//				Spec: kbv1.PodGroupSpec{
-	//					Queue: "c1",
-	//					MinMember: 2,
-	//				},
-	//			},
-	//			{
-	//				ObjectMeta: metav1.ObjectMeta{
-	//					Name:      "pg2",
-	//					Namespace: "c1",
-	//				},
-	//				Spec: kbv1.PodGroupSpec{
-	//					Queue: "c1",
-	//					MinMember: 1,
-	//				},
-	//			},
-	//		},
-	//		pods: []*v1.Pod{
-	//			buildPod("c1", "pg1_1", "", v1.PodPending, buildResourceList("2", "1G"), "pg1", make(map[string]string), make(map[string]string)),
-	//			buildPod("c1", "pg1_2", "", v1.PodPending, buildResourceList("2", "1G"), "pg1", make(map[string]string), make(map[string]string)),
-	//			buildPod("c1", "pg2_1", "", v1.PodPending, buildResourceList("2", "1G"), "pg2", make(map[string]string), make(map[string]string)),
-	//		},
-	//		nodes: []*v1.Node{
-	//			buildNode("n1", buildResourceList("2", "4Gi"), make(map[string]string)),
-	//		},
-	//		queues: []*kbv1.Queue{
-	//			{
-	//				ObjectMeta: metav1.ObjectMeta{
-	//					Name: "c1",
-	//				},
-	//				Spec: kbv1.QueueSpec{
-	//					Weight: 1,
-	//				},
-	//			},
-	//		},
-	//		expected: map[string]string{
-	//			"c1/pg2_1": "n1",
-	//		},
-	//	},
-	//}
-	//
-	//backFill := New()
-	//
-	//for i, test := range tests {
-	//	binder := &fakeBinder{
-	//		binds: map[string]string{},
-	//		c:     make(chan string),
-	//	}
-	//	schedulerCache := &cache.SchedulerCache{
-	//		Nodes:         make(map[string]*api.NodeInfo),
-	//		Jobs:          make(map[api.JobID]*api.JobInfo),
-	//		Queues:        make(map[api.QueueID]*api.QueueInfo),
-	//		Binder:        binder,
-	//		StatusUpdater: &fakeStatusUpdater{},
-	//		VolumeBinder:  &fakeVolumeBinder{},
-	//
-	//		Recorder: record.NewFakeRecorder(100),
-	//	}
-	//	for _, node := range test.nodes {
-	//		schedulerCache.AddNode(node)
-	//	}
-	//	for _, pod := range test.pods {
-	//		schedulerCache.AddPod(pod)
-	//	}
-	//
-	//	for _, ss := range test.podGroups {
-	//		schedulerCache.AddPodGroup(ss)
-	//	}
-	//
-	//	for _, q := range test.queues {
-	//		schedulerCache.AddQueue(q)
-	//	}
-	//
-	//	ssn := framework.OpenSession(schedulerCache, []conf.Tier{
-	//		{
-	//			Plugins: []conf.PluginOption{
-	//				{
-	//					Name: "gang",
-	//				},
-	//			},
-	//		},
-	//	})
-	//	defer framework.CloseSession(ssn)
-	//
-	//	for _, job := range ssn.Jobs {
-	//		for _, task := range job.Tasks {
-	//			for _, node := range ssn.Nodes {
-	//				if task.Resreq.LessEqual(node.Idle) {
-	//					ssn.Allocate(task, node.Name, false)
-	//				}
-	//			}
-	//		}
-	//	}
-	//
-	//	backFill.Execute(ssn)
-	//
-	//	for i := 0; i < len(test.expected); i++ {
-	//		select {
-	//		case <-binder.c:
-	//		case <-time.After(3 * time.Second):
-	//			t.Errorf("Failed to get binding request.")
-	//		}
-	//	}
-	//
-	//	if !reflect.DeepEqual(test.expected, binder.binds) {
-	//		t.Errorf("case %d (%s): expected: %v, got %v ", i, test.name, test.expected, binder.binds)
-	//	}
-	//}
+	tests := []struct {
+		name      string
+		podGroups []*kbv1.PodGroup
+		pods      []*v1.Pod
+		nodes     []*v1.Node
+		queues    []*kbv1.Queue
+		expected  map[string]string
+	}{
+		{
+			name: "two jobs with one node",
+			podGroups: []*kbv1.PodGroup{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "pg1",
+						Namespace: "c1",
+					},
+					Spec: kbv1.PodGroupSpec{
+						Queue: "c1",
+						MinMember: 2,
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "pg2",
+						Namespace: "c1",
+					},
+					Spec: kbv1.PodGroupSpec{
+						Queue: "c1",
+						MinMember: 1,
+					},
+				},
+			},
+			pods: []*v1.Pod{
+				buildPod("c1", "pg1_1", "", v1.PodPending, buildResourceList("2", "1G"), "pg1", make(map[string]string), make(map[string]string)),
+				buildPod("c1", "pg1_2", "", v1.PodPending, buildResourceList("2", "1G"), "pg1", make(map[string]string), make(map[string]string)),
+				buildPod("c1", "pg2_1", "", v1.PodPending, buildResourceList("2", "1G"), "pg2", make(map[string]string), make(map[string]string)),
+			},
+			nodes: []*v1.Node{
+				buildNode("n1", buildResourceList("2", "4Gi"), make(map[string]string)),
+			},
+			queues: []*kbv1.Queue{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "c1",
+					},
+					Spec: kbv1.QueueSpec{
+						Weight: 1,
+					},
+				},
+			},
+			expected: map[string]string{
+				"c1/pg2_1": "n1",
+			},
+		},
+	}
+
+	backFill := New()
+
+	for i, test := range tests {
+		binder := &fakeBinder{
+			binds: map[string]string{},
+			c:     make(chan string),
+		}
+		schedulerCache := &cache.SchedulerCache{
+			Nodes:         make(map[string]*api.NodeInfo),
+			Jobs:          make(map[api.JobID]*api.JobInfo),
+			Queues:        make(map[api.QueueID]*api.QueueInfo),
+			Binder:        binder,
+			StatusUpdater: &fakeStatusUpdater{},
+			VolumeBinder:  &fakeVolumeBinder{},
+
+			Recorder: record.NewFakeRecorder(100),
+		}
+		for _, node := range test.nodes {
+			schedulerCache.AddNode(node)
+		}
+		for _, pod := range test.pods {
+			schedulerCache.AddPod(pod)
+		}
+
+		for _, ss := range test.podGroups {
+			schedulerCache.AddPodGroup(ss)
+		}
+
+		for _, q := range test.queues {
+			schedulerCache.AddQueue(q)
+		}
+
+		ssn := framework.OpenSession(schedulerCache, []conf.Tier{
+			{
+				Plugins: []conf.PluginOption{
+					{
+						Name: "gang",
+					},
+				},
+			},
+		})
+		defer framework.CloseSession(ssn)
+
+		for _, job := range ssn.Jobs {
+			for _, task := range job.Tasks {
+				for _, node := range ssn.Nodes {
+					if task.Resreq.LessEqual(node.Idle) {
+						ssn.Allocate(task, node.Name, false)
+					}
+				}
+			}
+		}
+
+		ssn.EnableBackfill = true
+		backFill.Execute(ssn)
+
+		for i := 0; i < len(test.expected); i++ {
+			select {
+			case <-binder.c:
+			case <-time.After(3 * time.Second):
+				t.Errorf("Failed to get binding request.")
+			}
+		}
+
+		if !reflect.DeepEqual(test.expected, binder.binds) {
+			t.Errorf("case %d (%s): expected: %v, got %v ", i, test.name, test.expected, binder.binds)
+		}
+	}
 }

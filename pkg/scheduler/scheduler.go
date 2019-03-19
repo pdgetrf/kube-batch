@@ -38,6 +38,7 @@ type Scheduler struct {
 	schedulerConf  string
 	schedulePeriod time.Duration
 	enablePreemption bool
+	enableBackfill bool
 }
 
 func NewScheduler(
@@ -47,6 +48,7 @@ func NewScheduler(
 	period time.Duration,
 	defaultQueue string,
 	enablePreemption bool,
+	enableBackfill bool,
 ) (*Scheduler, error) {
 	scheduler := &Scheduler{
 		config:         config,
@@ -54,6 +56,7 @@ func NewScheduler(
 		cache:          schedcache.New(config, schedulerName, defaultQueue),
 		schedulePeriod: period,
 		enablePreemption: enablePreemption,
+		enableBackfill: enableBackfill,
 	}
 
 	return scheduler, nil
@@ -92,6 +95,7 @@ func (pc *Scheduler) runOnce() {
 
 	ssn := framework.OpenSession(pc.cache, pc.plugins)
 	ssn.EnablePreemption = pc.enablePreemption
+	ssn.EnableBackfill = pc.enableBackfill
 
 	defer framework.CloseSession(ssn)
 
